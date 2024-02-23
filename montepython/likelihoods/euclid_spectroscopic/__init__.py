@@ -592,7 +592,6 @@ class euclid_spectroscopic(Likelihood):
             chi2_of_z = simpson(mu_integrant[:], x=self.mu_fid[:])
             chi2 += chi2_of_z
 
-        print("euclid_spectroscopic: chi2 =", chi2)
         return -chi2 / 2.0
 
     def array_integrand(self, index_z, index_mu):
