@@ -6,7 +6,7 @@ euclid_spectroscopic.fiducial_file  = "euclid_pk_fiducial.dat"
 
 # Choose treatment of sigma_v and sigma_p ('linear', 'pessimistic', 'optimistic', 'superpessimistic')
 # For WP6 the pessimistic case is also calculated the same way as the optimistic here so one can also use 'optimistic' as well
-euclid_spectroscopic.NonLinError = 'pessimistic'
+euclid_spectroscopic.NonLinError = 'superpessimistic'
 
 # nuisance parameters
 euclid_spectroscopic.use_nuisance = ['P_shot0','P_shot1','P_shot2','P_shot3','lnbsigma8_0', 'lnbsigma8_1', 'lnbsigma8_2', 'lnbsigma8_3']
@@ -37,7 +37,7 @@ euclid_spectroscopic.kmin = 0.001
 # optimistic case:
 #euclid_spectroscopic.kmax = 0.30
 #
-euclid_spectroscopic.kmax = 0.30
+euclid_spectroscopic.kmax = 0.25
 
 ############################################################
 
