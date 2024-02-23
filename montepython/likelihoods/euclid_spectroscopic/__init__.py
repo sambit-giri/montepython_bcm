@@ -468,6 +468,7 @@ class euclid_spectroscopic(Likelihood):
         )
 
         # For plotting P_m and P_nw:
+        # To debug the individual components
         Pk_debug = False
         if Pk_debug == True:
             debug_file_path = os.path.join(self.data_directory, "euclid_GC_k.npy")
@@ -494,26 +495,6 @@ class euclid_spectroscopic(Likelihood):
             with open(debug_file_path, "w") as debug_file:
                 np.savetxt(debug_file, self.P_obs[:, :, 0])
 
-        # To debug the individual components
-        Pk_debug = False
-        if Pk_debug == True:
-            debug_file_path = os.path.join(self.data_directory, "euclid_GC_k_fid.npy")
-            with open(debug_file_path, "w") as debug_file:
-                np.savetxt(debug_file, self.k_fid)
-            debug_file_path = os.path.join(self.data_directory, "euclid_GC_FKaiser.npy")
-            with open(debug_file_path, "w") as debug_file:
-                np.savetxt(debug_file, F_Kaiser[:, :, 0])
-            debug_file_path = os.path.join(self.data_directory, "euclid_GC_FFog.npy")
-            with open(debug_file_path, "w") as debug_file:
-                np.savetxt(debug_file, F_FOG[:, :, 0])
-            debug_file_path = os.path.join(self.data_directory, "euclid_GC_Fz.npy")
-            with open(debug_file_path, "w") as debug_file:
-                np.savetxt(debug_file, F_z[:, :, 0])
-            debug_file_path = os.path.join(self.data_directory, "euclid_GC_fz_fid.npy")
-            with open(debug_file_path, "w") as debug_file:
-                np.savetxt(debug_file, self.f_fid[:, :, 0])
-
-        Pk_debug = True
         if Pk_debug:
             debug_file_path = os.path.join(self.data_directory, "euclid_GCsp_obs.npy")
             np.savez(
