@@ -31,9 +31,9 @@ euclid_photometric.lmin = 10
 # euclid_photometric.lmax_GC=750
 # euclid_photometric.lmax_XC=750
 
-euclid_photometric.lmax_WL = 1500
-euclid_photometric.lmax_GC = 750
-euclid_photometric.lmax_XC = 750
+euclid_photometric.lmax_WL = 5000
+euclid_photometric.lmax_GC = 3000
+euclid_photometric.lmax_XC = 3000
 
 # number of discrete l values
 euclid_photometric.lbin = 100

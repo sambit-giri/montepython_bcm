@@ -245,7 +245,7 @@ class euclid_photometric(Likelihood):
 
         self.kmin_in_inv_Mpc = self.k_min_h_by_Mpc * cosmo.h()
         self.kmax_in_inv_Mpc = self.k_max_h_by_Mpc * cosmo.h()
-        
+
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
             # constant bias in each zbin, marginalise
             self.bias = np.zeros((self.nbin),'float64')
@@ -350,7 +350,7 @@ class euclid_photometric(Likelihood):
             for iz, zi in enumerate(self.z):
                 pknn_mask = np.where((k[:,iz]>self.kmin_in_inv_Mpc) & (k[:,iz]<self.kmax_in_inv_Mpc))
                 D_z[pknn_mask,iz] = np.reshape(np.sqrt(Pk_m_l_spline(k[pknn_mask,iz],zi) / Pk_m_l_spline(k[pknn_mask,iz],0)),D_z[pknn_mask,iz].shape)
-        
+
         if self.printtimes:
             t_growth = time()
             print("Growthfactor obtained in", t_growth-t_nonlinear)
@@ -532,12 +532,12 @@ class euclid_photometric(Likelihood):
 
         eps_l = np.zeros_like(ells)
         if self.theoretical_error != False:
-            
+
             ######################
             # Theoretical errors #
             ######################
             import theorerical_errors
-            
+
             El_dict = theorerical_errors.get_covariance_error(cosmo, data, self, k, Pk_WL, Pk_GC, Pk_XC, W_L, W_G)
             T_Rerr_dict.update(theorerical_errors.spine_error(self, El_dict))
             eps_l = theorerical_errors.minimize_chisq(self, self.compute_chisq, ells, self.Cov_observ_dict, Cov_theory_dict, T_Rerr_dict)
