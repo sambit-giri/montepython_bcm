@@ -1,6 +1,9 @@
 import numpy as np
 from scipy.interpolate import RectBivariateSpline, UnivariateSpline
 
+"""
+This is not a boost in the traditional sense. It rather is just the ratio of the P_cb and P_mm that shows up when looking at the neutrino induced scale dependent galaxy bias.
+"""
 def get_boost_neutrino_bias(cosmo, data, lkl, Pk_m_nl_grid, k, z):
 
     f_cdm = cosmo.Omega0_cdm()/cosmo.Omega_m()
@@ -21,12 +24,11 @@ def get_boost_neutrino_bias(cosmo, data, lkl, Pk_m_nl_grid, k, z):
     Pk_m_nl_grid = np.flip(Pk_m_nl_grid,axis=1)
     Pk_cb_nl_grid = np.flip(Pk_cb_nl_grid,axis=1)
 
-    Pk_m_nl_spline = RectBivariateSpline(k_grid, z_grid, Pk_m_nl_grid)
-    Pk_cb_nl_spline = RectBivariateSpline(k_grid, z_grid, Pk_cb_nl_grid)
+    Pk_ratio = RectBivariateSpline(k_grid, z_grid, Pk_cb_nl_grid /Pk_m_nl_grid)
 
     boost_neutrino_bias = np.ones_like(k, 'float64')
     for iz, zi in enumerate(z):
         pknn_mask = np.where((k[:,iz]>lkl.kmin_in_inv_Mpc) & (k[:,iz]<lkl.kmax_in_inv_Mpc))
-        boost_neutrino_bias[pknn_mask,iz] = np.reshape(Pk_cb_nl_spline(k[pknn_mask,iz],zi) / Pk_m_nl_spline(k[pknn_mask,iz],zi),boost_neutrino_bias[pknn_mask,iz].shape)
+        boost_neutrino_bias[pknn_mask,iz] = np.reshape(Pk_ratio(k[pknn_mask,iz],zi),boost_neutrino_bias[pknn_mask,iz].shape)
 
     return boost_neutrino_bias

@@ -73,13 +73,7 @@ euclid_photometric.scale_dependent_f = True
 euclid_photometric.bias_model = 'binned'
 
 # what tracer to use for the GCph ('clustering' or 'matter')
-euclid_photometric.use_tracer = 'clustering'
-
-#fofR model
-euclid_photometric.use_fofR = False
-euclid_photometric.use_bug = False
-euclid_photometric.fofR_interpolation_k_boost = 40
-euclid_photometric.fofR_interpolation_z_boost = 4
+euclid_photometric.use_tracer = 'matter'
 
 # baryonic feedback
 euclid_photometric.use_BCemu = False
@@ -95,8 +89,9 @@ euclid_photometric.fR_error = 0.02
 # model shift checks
 euclid_photometric.fit_different_data = False
 #########################
-euclid_photometric.data_use_fofR = 'Winther'
 euclid_photometric.data_use_BCemu= True
+euclid_photometric.data_use_tracer= "clustering"
+
 
 # debugging
 #########################

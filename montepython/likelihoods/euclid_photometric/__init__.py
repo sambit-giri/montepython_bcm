@@ -136,9 +136,6 @@ class euclid_photometric(Likelihood):
             self.nuisance += ['log10Mc']
             self.nuisance += ['nu_Mc']
 
-        if self.use_fofR or (self.fit_different_data and self.data_use_fofR):
-            self.nuisance += ['lgfR0']
-
         #############
         # Read data #
         #############
@@ -186,7 +183,7 @@ class euclid_photometric(Likelihood):
         else:
             if self.fit_different_data:
                 self.use_BCemu = self.data_use_BCemu
-                self.use_fofR = self.data_use_fofR
+                self.use_tracer = self.data_use_tracer
 
         return
 
