@@ -31,9 +31,9 @@ euclid_photometric.lmin = 10
 # euclid_photometric.lmax_GC=750
 # euclid_photometric.lmax_XC=750
 
-euclid_photometric.lmax_WL = 1500
-euclid_photometric.lmax_GC = 750
-euclid_photometric.lmax_XC = 750
+euclid_photometric.lmax_WL = 5000
+euclid_photometric.lmax_GC = 3000
+euclid_photometric.lmax_XC = 3000
 
 # number of discrete l values
 euclid_photometric.lbin = 100
@@ -84,17 +84,13 @@ euclid_photometric.BCemu_z_bins = 20
 # Theory error
 euclid_photometric.theoretical_error = False
 euclid_photometric.minimize_Terr_binned = True
-euclid_photometric.fR_error = 0.02
 
 # model shift checks
 euclid_photometric.fit_different_data = False
-#########################
 euclid_photometric.data_use_BCemu= True
 euclid_photometric.data_use_tracer= "clustering"
 
-
 # debugging
-#########################
 euclid_photometric.printtimes = False
 euclid_photometric.save_PS = False
 euclid_photometric.save_Cell = False
