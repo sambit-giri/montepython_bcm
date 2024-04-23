@@ -104,7 +104,6 @@ class euclid_photometric(Likelihood):
         ###########################
 
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
-            self.bias = np.zeros(self.nbin)
             self.bias_names = []
             for ibin in range(self.nbin):
                 self.bias_names.append('bias_'+str(ibin+1))
@@ -235,34 +234,6 @@ class euclid_photometric(Likelihood):
         self.kmin_in_inv_Mpc = self.k_min_h_by_Mpc * cosmo.h()
         self.kmax_in_inv_Mpc = self.k_max_h_by_Mpc * cosmo.h()
 
-        if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
-            # constant bias in each zbin, marginalise
-            self.bias = np.zeros((self.nbin),'float64')
-            if self.bias_model == 'binned_constant' :
-                for ibin in range(self.nbin):
-                    self.bias[ibin] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
-
-            elif self.bias_model == 'binned' :
-                biaspars = dict()
-                for ibin in range(self.nbin):
-                    biaspars['b'+str(ibin+1)] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
-                brang = range(1,len(self.z_bin_edge))
-                last_bin_num = brang[-1]
-                def binbis(zz):
-                    lowi = np.where( self.z_bin_edge <= zz )[0][-1]
-                    if zz >= self.z_bin_edge[-1] and lowi == last_bin_num:
-                        bii = biaspars['b'+str(last_bin_num)]
-                    else:
-                        bii = biaspars['b'+str(lowi+1)]
-                    return bii
-                vbinbis = np.vectorize(binbis)
-                self.biasfunc = vbinbis
-
-            elif self.bias_model == 'interpld' :
-                for ibin in range(self.nbin):
-                    self.bias[ibin] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
-                self.biasfunc = interp1d(self.z_bin_center, self.bias, bounds_error=False, fill_value="extrapolate")
-
         if self.l_array == 'WL':
             l = self.l_WL
         if self.l_array == 'GC':
@@ -307,11 +278,6 @@ class euclid_photometric(Likelihood):
         ########################
         # Boosts and Emulators #
         ########################
-
-        if self.use_tracer == 'clustering':
-            import neutrino_bias_model
-            # only effects terms multiplied by galaxy bias
-            Pk_GC *= neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)
 
         if self.use_BCemu:
             import baryonic_feedback
@@ -367,14 +333,43 @@ class euclid_photometric(Likelihood):
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
             # Compute window function W_G(z) of galaxy clustering for each bin:
 
-            # - case where there is one constant bias value b_i for each bin i
+            bias_values = np.zeros((self.nbin),'float64')
+            for ibin in range(self.nbin):
+                bias_values[ibin] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
+
             if self.bias_model == 'binned_constant' :
-                W_G = np.zeros((self.nzmax, self.nbin), 'float64')
-                W_G = self.bias[None,:] * self.H_z[:,None] * self.eta_z
-            # - case where the bias is a single function b(z) for all bins
-            if self.bias_model == 'binned' or self.bias_model == 'interpld':
-                W_G = np.zeros((self.nzmax, self.nbin), 'float64')
-                W_G =  (self.H_z * self.biasfunc(self.z))[:,None] * self.eta_z
+                galaxy_bias = bias_values[None,None,:]
+
+            elif self.bias_model == 'binned' :
+                biaspars = dict()
+                for ibin in range(self.nbin):
+                    biaspars['b'+str(ibin+1)] = bias_values[ibin]
+                brang = range(1,len(self.z_bin_edge))
+                last_bin_num = brang[-1]
+
+                def binbis(zz):
+                    lowi = np.where( self.z_bin_edge <= zz )[0][-1]
+                    if zz >= self.z_bin_edge[-1] and lowi == last_bin_num:
+                        bii = biaspars['b'+str(last_bin_num)]
+                    else:
+                        bii = biaspars['b'+str(lowi+1)]
+                    return bii
+
+                vbinbis = np.vectorize(binbis)
+                galaxy_bias = vbinbis(self.z)[None,:,None]
+
+            elif self.bias_model == 'interpld' :
+                biasfunc = interp1d(self.z_bin_center, bias_values, bounds_error=False, fill_value="extrapolate")
+                galaxy_bias = biasfunc(self.z)[None,:,None]
+
+            # Handle the neutrino induced scale dependant bias following the prescription of the neurino paper
+            if self.use_tracer == 'clustering':
+                import neutrino_bias_model
+                galaxy_bias = np.ones(self.lbin)[:,None,None] * galaxy_bias
+                galaxy_bias *= np.sqrt(neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)[:,:, None])
+
+            W_G = np.zeros((self.nzmax, self.nbin), 'float64')
+            W_G = galaxy_bias * self.H_z[None,:,None] * self.eta_z[None,:,:]
 
         if self.printtimes:
             t_window = time()
@@ -391,15 +386,15 @@ class euclid_photometric(Likelihood):
 
         # the indices are ell, z, bin_i, bin_j in the int and ell, bin_i, bin_j in the Ceeell
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
-            Cl_LL_int = W_L[:,:,:,None] * W_L[:,:,None,:] * Pk_WL[:,:,None,None] / self.H_z[None,:,None,None] / self.r[None,:,None,None] / self.r[None,:,None,None]
+            Cl_LL_int = W_L[:,:,:, None] * W_L[:,:, None,:] * Pk_WL[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_LL     = trapz(Cl_LL_int,self.z,axis=1)[:nell_WL,:,:]
 
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
-            Cl_GG_int = W_G[None,:,:,None] * W_G[None,: , None, :] * Pk_GC[:,:,None,None] / self.H_z[None,:,None,None] / self.r[None,:,None,None] / self.r[None,:,None,None]
+            Cl_GG_int = W_G[:,:,:, None] * W_G[:,:, None,:] * Pk_GC[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_GG     = trapz(Cl_GG_int,self.z,axis=1)[:nell_GC,:,:]
 
         if 'WL_GCph_XC' in self.probe:
-            Cl_LG_int = W_L[:,:,:,None] * W_G[None,: , None, :] * Pk_XC[:,:,None,None] / self.H_z[None,:,None,None] / self.r[None,:,None,None] / self.r[None,:,None,None]
+            Cl_LG_int = W_L[:,:,:, None] * W_G[:,:, None,:] * Pk_XC[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_LG     = trapz(Cl_LG_int,self.z,axis=1)[:nell_XC,:,:]
             Cl_GL     = np.transpose(Cl_LG,(0,2,1))
 

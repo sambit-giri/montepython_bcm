@@ -11,7 +11,6 @@ from scipy import interpolate
 from scipy.signal import savgol_filter
 
 
-
 class euclid_spectroscopic(Likelihood):
     def __init__(self, path, data, command_line):
         Likelihood.__init__(self, path, data, command_line)
@@ -55,9 +54,7 @@ class euclid_spectroscopic(Likelihood):
         self.D_A_fid = np.zeros(self.nbin, "float64")
         self.sigma_v_fid = np.zeros(self.nbin, "float64")
         self.sigma_p_fid = np.zeros(self.nbin, "float64")
-        self.P_obs_fid = np.zeros(
-            (self.k_size, self.nbin, self.mu_size), "float64"
-        )
+        self.P_obs_fid = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")
 
         if self.scale_dependent_growth_factor_f is False:
             self.f_fid = np.zeros(self.nbin, "float64")
@@ -68,55 +65,51 @@ class euclid_spectroscopic(Likelihood):
 
         fid_file_path = os.path.join(self.data_directory, self.fiducial_file)
 
-        if os.path.exists(fid_file_path):
+        if os.path.exists(fid_file_path+".npz"):
             self.fid_values_exist = True
-            with open(fid_file_path, "r") as fid_file:
-                line = fid_file.readline()
-                while line.find("#") != -1:
-                    line = fid_file.readline()
-                while line.find("\n") != -1 and len(line) == 1:
-                    line = fid_file.readline()
-                for index_z in range(self.nbin):
-                    self.H_fid[index_z] = float(line.split()[0])
-                    self.D_A_fid[index_z] = float(line.split()[1])
-                    line = fid_file.readline()
-                self.h_fid = float(line)
-                line = fid_file.readline()
-                for index_k in range(self.k_size):
-                    for index_z in range(self.nbin):
-                        arr = np.array([float(x) for x in line.split()])
-                        self.P_obs_fid[index_k, index_z, :] = arr[:]
-                        line = fid_file.readline()
-                self.sigma_v_fid = np.array([float(x) for x in line.split()])
-                line = fid_file.readline()
-                self.sigma_p_fid = np.array([float(x) for x in line.split()])
+            fid_file = np.load(fid_file_path+".npz")
+
+            if not np.isclose(
+                fid_file["grid_shape"], (self.k_size, self.nbin, self.mu_size)
+            ).all():
+                warnings.warn(
+                    "The amount of k, z, or mu bins has changed between fiducial and now.\n Fiducial shape = {}, new shape = {}. \n Please remove old fiducial and generate a new one".format(
+                        fid_file["grid_shape"], (self.k_size, self.nbin, self.mu_size)
+                    )
+                )
+                raise ValueError
+
+            self.H_fid[:] = fid_file["H"]
+            self.D_A_fid[:] = fid_file["D_A"]
+            self.h_fid = fid_file["h"]
+            self.sigma_p_fid[:] = fid_file["sigma_p"]
+            self.sigma_v_fid[:] = fid_file["sigma_v"]
+            self.P_obs_fid[:, :, :] = fid_file["P_obs"]
+
+            try:
                 if self.scale_dependent_growth_factor_f is False:
-                    line = fid_file.readline()
-                    self.f_fid = np.array([float(x) for x in line.split()])
+                    self.f_fid[:] = fid_file["f_mm"]
+                    self.f_cb_fid[:] = fid_file["f_cb"]
                 else:
-                    for index_k in range(self.k_size):
-                        for index_z in range(self.nbin):
-                            line = fid_file.readline()
-                            self.f_fid[index_k, index_z, :] = np.array(
-                                [float(x) for x in line.split()]
-                            )
-                if self.scale_dependent_growth_factor_f is False:
-                    line = fid_file.readline()
-                    self.f_cb_fid = np.array([float(x) for x in line.split()])
-                else:
-                    for index_k in range(self.k_size):
-                        for index_z in range(self.nbin):
-                            line = fid_file.readline()
-                            self.f_cb_fid[index_k, index_z, :] = np.array(
-                                [float(x) for x in line.split()]
-                            )
+                    self.f_fid[:, :, :] = fid_file["f_mm"]
+                    self.f_cb_fid[:, :, :] = fid_file["f_cb"]
+            except ValueError as VE:
+                warnings.warn(
+                    "The scale dependance of the grothrate has changed between the fiducial and now."
+                )
+                raise VE
+
         else:
             # the fiducial file will be created in the loglkl() function below
             # therefore we need to extract the h fiducial value from the data
             try:
                 self.h_fid = data.parameters["h"][0]
             except KeyError as kk:
-                print("{:s} fiducial value should be present in the .param file".format(str(kk)))
+                print(
+                    "{:s} fiducial value should be present in the .param file".format(
+                        str(kk)
+                    )
+                )
                 raise
 
         # TODO calculate the fiducial volums (not just for Euclid fiducial)
@@ -124,9 +117,7 @@ class euclid_spectroscopic(Likelihood):
             np.array([6.86e-4, 5.58e-4, 4.21e-4, 2.61e-4]) * self.h_fid**3
         )
         self.P_shot_fid = 1 / (self.gal_density_fid)
-        self.V_fid = (
-            np.array([7.94, 9.15, 10.05, 16.22]) * 1e9 / (self.h_fid**3)
-        )
+        self.V_fid = np.array([7.94, 9.15, 10.05, 16.22]) * 1e9 / (self.h_fid**3)
 
         if self.NonLinError == "marginalized":
             self.nuisance += [
@@ -331,8 +322,7 @@ class euclid_spectroscopic(Likelihood):
         else:
             print("\n")
             warnings.warn(
-                "Dewiggle method not recognised."
-                "Please choose 'savgol_filter'"
+                "Dewiggle method not recognised." "Please choose 'savgol_filter'"
             )
             raise ValueError
 
@@ -532,55 +522,29 @@ class euclid_spectroscopic(Likelihood):
 
         if self.fid_values_exist is False:
             fid_file_path = os.path.join(self.data_directory, self.fiducial_file)
-            with open(fid_file_path, "w") as fid_file:
-                fid_file.write("# Fiducial parameters")
-                for key, value in io_mp.dictitems(data.mcmc_parameters):
-                    fid_file.write(
-                        ", %s = %.20g" % (key, value["current"] * value["scale"])
-                    )
-                fid_file.write("\n")
-                for index_z in range(self.nbin):
-                    fid_file.write("%.20g %.20g" % (H[index_z], D_A[index_z]))
-                    fid_file.write("\n")
-                fid_file.write("%.20g" % (cosmo.h()))
-                fid_file.write("\n")
-                for index_k in range(self.k_size):
-                    for index_z in range(self.nbin):
-                        fid_file.write(
-                            " ".join(
-                                ["%.20g" % x for x in self.P_obs[index_k, index_z, :]]
-                            )
-                        )
-                        fid_file.write("\n")
-                fid_file.write(" ".join(["%.20g" % x for x in sigma_v[:]]))
-                fid_file.write("\n")
-                fid_file.write(" ".join(["%.20g" % x for x in sigma_p[:]]))
-                fid_file.write("\n")
-                if self.scale_dependent_growth_factor_f is False:
-                    fid_file.write(" ".join(["%.20g" % x for x in f[:]]))
-                else:
-                    for index_k in range(self.k_size):
-                        for index_z in range(self.nbin):
-                            fid_file.write(
-                                " ".join(["%.20g" % x for x in f[index_k, index_z, :]])
-                            )
-                            fid_file.write("\n")
-                if self.scale_dependent_growth_factor_f is False:
-                    fid_file.write(" ".join(["%.20g" % x for x in f_cb[:]]))
-                else:
-                    for index_k in range(self.k_size):
-                        for index_z in range(self.nbin):
-                            fid_file.write(
-                                " ".join(
-                                    ["%.20g" % x for x in f_cb[index_k, index_z, :]]
-                                )
-                            )
-                            fid_file.write("\n")
-            print("\n")
+            fiducial_cosmo = dict()
+            for key, value in data.mcmc_parameters.items():
+                fiducial_cosmo[key] = value["current"] * value["scale"]
+
+            np.savez(
+                fid_file_path,
+                grid_shape=(self.k_size, self.nbin, self.mu_size),
+                fid_cosmo=fiducial_cosmo,
+                H=H,
+                D_A=D_A,
+                h=cosmo.h(),
+                sigma_p=sigma_p,
+                sigma_v=sigma_v,
+                f_mm=f,
+                f_cb=f_cb,
+                P_obs=self.P_obs,
+            )
+
             warnings.warn(
                 "Writing fiducial model in %s, for %s likelihood\n"
                 % (self.data_directory + "/" + self.fiducial_file, self.name)
             )
+
             return 1j
 
         chi2 = 0.0

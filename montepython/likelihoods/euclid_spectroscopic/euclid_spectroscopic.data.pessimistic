@@ -11,7 +11,7 @@
 
 # data directory and fiducial file
 euclid_spectroscopic.data_directory = data.path['data']
-euclid_spectroscopic.fiducial_file  = "euclid_spectroscopic_fiducial.dat"
+euclid_spectroscopic.fiducial_file  = "euclid_pk_fiducial"
 
 # choose treatment of sigma_v and sigma_p ('linear', 'predicted', 'marginalized')
 # 'linear' means sigma_v=sigma_p=0

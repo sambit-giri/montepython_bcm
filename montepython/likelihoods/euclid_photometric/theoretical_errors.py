@@ -57,12 +57,12 @@ def get_covariance_error(cosmo, data, lkl, k, Pk_WL, Pk_GC, Pk_XC, W_WL, W_GC):
         return_dict["El_LL"] = El_LL
 
     if 'GCph' in lkl.probe or 'WL_GCph_XC' in lkl.probe:
-        El_GG_int = W_GC[None,:,:,None] * W_GC[None,: , None, :] * Pk_GC[:,:,None,None] / lkl.H_z[None,:,None,None] / lkl.r[None,:,None,None] / lkl.r[None,:,None,None] * alpha[:,:,None,None]
+        El_GG_int = W_GC[:,:,:, None] * W_GC[:,:, None,:] * Pk_GC[:,:,None,None] / lkl.H_z[None,:,None,None] / lkl.r[None,:,None,None] / lkl.r[None,:,None,None] * alpha[:,:,None,None]
         El_GG     = trapz(El_GG_int,lkl.z,axis=1)[:nell_GC,:,:]
         return_dict["El_GG"] = El_GG
 
     if 'WL_GCph_XC' in lkl.probe:
-        El_LG_int = W_WL[:,:,:,None] * W_GC[None,: , None, :] * Pk_XC[:,:,None,None] / lkl.H_z[None,:,None,None] / lkl.r[None,:,None,None] / lkl.r[None,:,None,None] * alpha[:,:,None,None]
+        El_LG_int = W_WL[:,:,:, None] * W_GC[:,:, None,:] * Pk_XC[:,:,None,None] / lkl.H_z[None,:,None,None] / lkl.r[None,:,None,None] / lkl.r[None,:,None,None] * alpha[:,:,None,None]
         El_LG     = trapz(El_LG_int,lkl.z,axis=1)[:nell_XC,:,:]
         El_GL     = np.transpose(El_LG,(0,2,1))
         return_dict["El_LG"] = El_LG
