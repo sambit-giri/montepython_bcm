@@ -2,7 +2,7 @@
 
 # data directory and fiducial file
 euclid_spectroscopic.data_directory = data.path['data']
-euclid_spectroscopic.fiducial_file  = "euclid_pk_fiducial.dat"
+euclid_spectroscopic.fiducial_file  = "euclid_spectroscopic_fiducial.dat"
 
 # Choose treatment of sigma_v and sigma_p ('linear', 'pessimistic', 'optimistic', 'superpessimistic')
 # For WP6 the pessimistic case is also calculated the same way as the optimistic here so one can also use 'optimistic' as well

@@ -10,7 +10,7 @@
 
 # data directory and fiducial file
 euclid_photometric.data_directory = data.path['data']
-euclid_photometric.fiducial_file  = "euclid_xc_fiducial"
+euclid_photometric.fiducial_file  = "euclid_photometric_fiducial"
 
 #evaluated probes. Choose from ['WL','GCph','WL_GCph_XC']
 euclid_photometric.probe = ['WL_GCph_XC']
