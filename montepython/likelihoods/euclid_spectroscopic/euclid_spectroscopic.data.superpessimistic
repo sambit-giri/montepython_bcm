@@ -2,7 +2,7 @@
 
 # data directory and fiducial file
 euclid_spectroscopic.data_directory = data.path['data']
-euclid_spectroscopic.fiducial_file  = "euclid_pk_fiducial.dat"
+euclid_spectroscopic.fiducial_file  = "euclid_pk_fiducial"
 
 # Choose treatment of sigma_v and sigma_p ('linear', 'pessimistic', 'optimistic', 'superpessimistic')
 # For WP6 the pessimistic case is also calculated the same way as the optimistic here so one can also use 'optimistic' as well
@@ -75,8 +75,8 @@ euclid_spectroscopic.savgol_order = 3
 # parameters defining the spectroscopic redshift error
 # and the (wrong) double rescaleing of the internal k_grid
 
-euclid_spectroscopic.spectroscopic_error = 0.001
-euclid_spectroscopic.spectroscopic_error_z_dependent = True
+euclid_spectroscopic.spectroscopic_error = 0.002
+euclid_spectroscopic.spectroscopic_error_z_dependent = False
 
 # Tracer of Galcies ( 'matter' or 'clustering')
 euclid_spectroscopic.use_tracer = 'clustering'
