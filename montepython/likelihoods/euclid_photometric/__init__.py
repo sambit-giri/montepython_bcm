@@ -374,7 +374,7 @@ class euclid_photometric(Likelihood):
             if self.use_tracer == 'clustering':
                 import neutrino_bias_model
                 galaxy_bias = np.ones(self.lbin)[:,None,None] * galaxy_bias
-                galaxy_bias *= neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)[:,:, None]
+                galaxy_bias *= np.sqrt(neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)[:,:, None])
 
             W_G = np.zeros((self.nzmax, self.nbin), 'float64')
             W_G = galaxy_bias * self.H_z[None,:,None] * self.eta_z[None,:,:]
