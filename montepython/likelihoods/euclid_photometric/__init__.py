@@ -373,6 +373,7 @@ class euclid_photometric(Likelihood):
             # Handle the neutrino induced scale dependant bias following the prescription of the neurino paper
             if self.use_tracer == 'clustering':
                 import neutrino_bias_model
+                galaxy_bias = np.ones(self.lbin)[:,None,None] * galaxy_bias
                 galaxy_bias *= neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)[:,:, None]
 
             W_G = np.zeros((self.nzmax, self.nbin), 'float64')
