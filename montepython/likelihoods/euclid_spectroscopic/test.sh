@@ -10,6 +10,7 @@ COVMAT=covmat/euclid_spectroscopic_w0waMN.covmat
 
 echo "delete chains folder"
 rm -rv $CHAINS
+rm -rv ${CHAINS}_test
 
 echo "running superpessimistic case"
 cp -v montepython/likelihoods/euclid_spectroscopic/euclid_spectroscopic.data.superpessimistic montepython/likelihoods/euclid_spectroscopic/euclid_spectroscopic.data
