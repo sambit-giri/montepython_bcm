@@ -73,7 +73,7 @@ def get_covariance_error(cosmo, data, lkl, k, Pk_WL, Pk_GC, Pk_XC, W_WL, W_GC):
 """
 Spline the covariance error for all integer multipole and construct the covariance error matrix similar
 """
-def spine_error(lkl, El_dict):
+def spline_error(lkl, El_dict):
 
     return_dict = dict()
 
@@ -116,7 +116,7 @@ def minimize_chisq(lkl, compute_chisq, ells, Cov_observ_dict, Cov_theory_dict, T
             ells_binned = np.unique(np.geomspace(lkl.lmin,np.maximum(lkl.lmax_WL,lkl.lmax_GC), lkl.lbin, dtype = np.uint64))
             index_low = ells_binned[np.where(ells_binned < lkl.ell_jump)] - lkl.lmin
             index_high = ells_binned[np.where(ells_binned >= lkl.ell_jump)] - lkl.ell_jump - lkl.lmin
-        
+
         Cov_observ_dict_binned = dict()
         Cov_theory_dict_binned = dict()
         T_Rerr_dict_binned = dict()
@@ -145,7 +145,7 @@ def minimize_chisq(lkl, compute_chisq, ells, Cov_observ_dict, Cov_theory_dict, T
 
         res = minimize(pcompute_chisq, eps_l, tol=1e-3, method='Newton-CG',jac=pjac, hess='3-point')
         eps_l = res.x
-    
+
     return eps_l
 
 """

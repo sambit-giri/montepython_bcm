@@ -35,12 +35,6 @@ class euclid_photometric(Likelihood):
         self.need_cosmo_arguments(data, {'z_max_pk': self.zmax})
         self.need_cosmo_arguments(data, {'P_k_max_1/Mpc': 1.5*self.k_max_h_by_Mpc})
 
-        # Compute non-linear power spectrum if requested
-        if (self.use_halofit):
-            self.need_cosmo_arguments(data, {'non linear':'halofit'})
-            #self.need_cosmo_arguments(data, {'non linear':'HMcode'})
-
-
         # Define array of l values, evenly spaced in logscale
         if self.lmax_WL > self.lmax_GC:
             self.l_WL = np.logspace(np.log10(self.lmin), np.log10(self.lmax_WL), num=self.lbin, endpoint=True)
@@ -129,8 +123,6 @@ class euclid_photometric(Likelihood):
                 zlum[index] = line.split()[0]
                 lum[index] = line.split()[1]
             self.lum_func = interp1d(zlum, lum,kind='linear')
-
-        self.forge = None
 
         if self.use_BCemu or (self.fit_different_data and self.data_use_BCemu):
             self.nuisance += ['log10Mc']
@@ -533,11 +525,11 @@ class euclid_photometric(Likelihood):
             ######################
             # Theoretical errors #
             ######################
-            import theorerical_errors
+            import theoretical_errors
 
-            El_dict = theorerical_errors.get_covariance_error(cosmo, data, self, k, Pk_WL, Pk_GC, Pk_XC, W_L, W_G)
-            T_Rerr_dict.update(theorerical_errors.spine_error(self, El_dict))
-            eps_l = theorerical_errors.minimize_chisq(self, self.compute_chisq, ells, self.Cov_observ_dict, Cov_theory_dict, T_Rerr_dict)
+            El_dict = theoretical_errors.get_covariance_error(cosmo, data, self, k, Pk_WL, Pk_GC, Pk_XC, W_L, W_G)
+            T_Rerr_dict.update(theoretical_errors.spline_error(self, El_dict))
+            eps_l = theoretical_errors.minimize_chisq(self, self.compute_chisq, ells, self.Cov_observ_dict, Cov_theory_dict, T_Rerr_dict)
 
         chi2 = pcompute_chisq(eps_l)
 
@@ -595,4 +587,3 @@ class euclid_photometric(Likelihood):
             dtilde_mix = np.concatenate([dtilde_mix, dtilde_mix_high])
 
         return np.sum((2 * ells + 1) * self.fsky * ((dtilde_mix / dtilde_the) + np.log(dtilde_the / d_obs) - N) + np.power(eps_l, 2))
-
