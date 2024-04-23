@@ -27,7 +27,7 @@ class euclid_spectroscopic(Likelihood):
         )  # need high k for dewiggling
 
         # the entire likelihood code is using units of [1/Mpc] for k.
-        
+
         #################
         # define redshift bins
         #################
@@ -57,7 +57,7 @@ class euclid_spectroscopic(Likelihood):
         self.sigma_p_fid = np.zeros(self.nbin, "float64")
         self.P_obs_fid = np.zeros(
             (self.k_size, self.nbin, self.mu_size), "float64"
-        )  
+        )
 
         if self.scale_dependent_growth_factor_f is False:
             self.f_fid = np.zeros(self.nbin, "float64")
@@ -112,7 +112,7 @@ class euclid_spectroscopic(Likelihood):
                             )
         else:
             # the fiducial file will be created in the loglkl() function below
-            # therefore we need to extract the h fiducial value from the data 
+            # therefore we need to extract the h fiducial value from the data
             try:
                 self.h_fid = data.parameters["h"][0]
             except KeyError as kk:
@@ -123,12 +123,12 @@ class euclid_spectroscopic(Likelihood):
         self.gal_density_fid = (
             np.array([6.86e-4, 5.58e-4, 4.21e-4, 2.61e-4]) * self.h_fid**3
         )
-        self.P_shot_fid = 1 / (self.gal_density_fid)  
+        self.P_shot_fid = 1 / (self.gal_density_fid)
         self.V_fid = (
             np.array([7.94, 9.15, 10.05, 16.22]) * 1e9 / (self.h_fid**3)
-        )  
+        )
 
-        if self.NonLinError == "superpessimistic":
+        if self.NonLinError == "marginalized":
             self.nuisance += [
                 "sigma_v0",
                 "sigma_v1",
@@ -155,12 +155,12 @@ class euclid_spectroscopic(Likelihood):
 
         self.h = cosmo.h()
 
-        r, H = cosmo.z_of_r(self.z_mean)  
+        r, H = cosmo.z_of_r(self.z_mean)
         D_A = np.zeros(self.nbin, "float64")
         for i in range(len(D_A)):
-            D_A[i] = cosmo.angular_distance(self.z_mean[i])  
+            D_A[i] = cosmo.angular_distance(self.z_mean[i])
 
-        sigma_r = self.spectroscopic_error / H  
+        sigma_r = self.spectroscopic_error / H
         if self.spectroscopic_error_z_dependent:
             sigma_r *= 1 + self.z_mean
 
@@ -187,8 +187,8 @@ class euclid_spectroscopic(Likelihood):
             q_orth = np.ones((self.nbin,))
             q_parr = np.ones((self.nbin,))
         else:
-            q_orth = self.D_A_fid / D_A  
-            q_parr = H / self.H_fid  
+            q_orth = self.D_A_fid / D_A
+            q_parr = H / self.H_fid
 
         self.k = (
             self.k_fid[:, None, None]
@@ -199,7 +199,7 @@ class euclid_spectroscopic(Likelihood):
                 * (q_parr[None, :, None] ** 2 / (q_orth[None, :, None] ** 2) - 1)
             )
         )
-        
+
         # if you want to reproduce the Euclid IST:F wrong results with the h-bug rescale here the k as in the comment
         #    self.k *= self.h / self.h_fid  # "A rescaling so nice we had to do it twice"
 
@@ -286,8 +286,8 @@ class euclid_spectroscopic(Likelihood):
         )
         k_long = np.zeros(num_k_long)
         k_long = k_long_min * (1 + self.dewiggling_dlnk) ** np.arange(num_k_long)
-        pk_long = np.zeros((len(k_long), self.nbin), "float64")  
-        pk_cb_long = np.zeros((len(k_long), self.nbin), "float64")  
+        pk_long = np.zeros((len(k_long), self.nbin), "float64")
+        pk_cb_long = np.zeros((len(k_long), self.nbin), "float64")
 
         for index_k in range(len(k_long)):
             for index_z in range(self.nbin):
@@ -357,9 +357,9 @@ class euclid_spectroscopic(Likelihood):
             pk_tracer_nobao_spline = interpolate.interp1d(
                 k_long, pk_tracer_nobao_long[:, index_z]
             )
-            # This is open for debate if we should use P_m or P_cb for sigma_v . 
+            # This is open for debate if we should use P_m or P_cb for sigma_v .
             # The idea behind our choice of P_m is, that if it should be the same as sigma_p then we should use
-            # P_m as this is a gravitational effect and not related to the tracer bias. 
+            # P_m as this is a gravitational effect and not related to the tracer bias.
             # We could use diffrent sigma_v and sigma_p using P_cb and P_m respectively.
             pk_sigmavp[:, index_z] = np.exp(pk_lin_spline(k_sigmavp[:]))
             for index_mu in range(self.mu_size):
@@ -377,7 +377,7 @@ class euclid_spectroscopic(Likelihood):
             # linear setting
             sigma_v = np.zeros((self.nbin), "float64")
             sigma_p = np.zeros((self.nbin), "float64")
-        elif self.NonLinError == "pessimistic" or self.NonLinError == "optimistic":
+        elif self.NonLinError == "predicted":
             # nonlinear pessimistic and optimistic setting
             if self.fid_values_exist is False:
                 sigma_v = np.sqrt(
@@ -387,7 +387,7 @@ class euclid_spectroscopic(Likelihood):
             else:
                 sigma_v = self.sigma_v_fid
                 sigma_p = self.sigma_p_fid
-        elif self.NonLinError == "superpessimistic":
+        elif self.NonLinError == "marginalized":
             # nonlinear superpessimistic setting, varying freely sigma_p and sigma_v at each bin
             sigma_v = np.array(
                 [
@@ -418,7 +418,7 @@ class euclid_spectroscopic(Likelihood):
             print("\n")
             warnings.warn(
                 "Treatment of Non-linear error not recognised."
-                "Please choose 'linear', 'pessimistic' , 'optimistic' , 'superpessimistic' "
+                "Please choose 'linear', 'predicted' , 'marginalized' "
             )
             raise ValueError
 
