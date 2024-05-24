@@ -1,77 +1,100 @@
+#####################################################
+# Euclid spectroscopic galaxy clustering likelihood #
+#####################################################
+
+# - Based on an earlier euclid_pk likelihood initiated by A. Audren and J. Lesgourgues 1210.7183
+# - Improved by Sprenger et al. 1801.08331
+# - Further developped to match IST:Fisher recipe by
+#   S. Casas, M. Doerenkamp, J. Lesgourgues, L. Rathmann, Sabarish V., N. Schoeneberg
+# - validated against CosmicFish and IST:Fisher in 2303.09451
+# - further improved and generalised to massive neutrinos by S. Pamuk, S. Casas
+
 from montepython.likelihood_class import Likelihood
 import os
 import numpy as np
 import warnings
 from math import log, log10
-import io_mp
 from scipy.integrate import simpson
-from scipy.interpolate import CubicSpline as inter
-from scipy.interpolate import RectBivariateSpline, UnivariateSpline
-from scipy import interpolate
+from scipy.interpolate import RectBivariateSpline, UnivariateSpline, interp1d
 from scipy.signal import savgol_filter
 
 
 class euclid_spectroscopic(Likelihood):
+
+    # Initialization performed a single time at the beginning of the run
+
     def __init__(self, path, data, command_line):
         Likelihood.__init__(self, path, data, command_line)
+
         self.path_euclid_pk = path
         self.data_euclid_pk = data
         self.command_line_euclid_pk = command_line
 
-        # minimum requirements for CLASS
+        # Minimum requirements for CLASS
         self.need_cosmo_arguments(data, {"output": "mPk"})
         self.need_cosmo_arguments(data, {"z_max_pk": self.zmax})
-        self.need_cosmo_arguments(
-            data, {"P_k_max_1/Mpc": 51}
-        )  # need high k for dewiggling
+        self.need_cosmo_arguments(data, {"P_k_max_1/Mpc": 51})  # need high k_max for dewiggling
 
-        # the entire likelihood code is using units of [1/Mpc] for k.
+        # The entire likelihood code is using units of [1/Mpc] for k and Mpc^3 for P(k,z)
 
-        #################
-        # define redshift bins
-        #################
+        ########################
+        # define redshift bins #
+        ########################
 
-        self.z_edges = np.array([0.90, 1.10, 1.30, 1.50, 1.80])
+        # Create the array of z boundaries for each bin.
+        # Hard-coded, excepted the lowest and highest boundaries passed in euclid_spectorscopic.data
+        self.z_edges = np.array([self.zmin, 1.10, 1.30, 1.50, self.zmax])
+        # Create the array of mean z for each bin.
         self.z_mean = np.array([1.00, 1.20, 1.40, 1.65])
+        # put all of these in a single array ordered with growing z
         self.z = np.concatenate((self.z_edges, self.z_mean))
         self.z.sort()
+        # add the overall mean redshift of the survey as self.z[-1]
         self.z_central = 1.2
         self.z = np.append(self.z, self.z_central)
-        # add the mean redshift of the survey as self.z[-1]
-
+        # Number of bins
         self.nbin = len(self.z_mean)
+        # Number of values in concatenated array
         self.nz = len(self.z)
+        # array of values of mu (cosine of angle w.r.t line of sight, for rsd)
         self.mu_fid = np.linspace(-1, 1, self.mu_size)
 
-        ################
-        # Noise spectrum
-        ################
+        #############
+        # Read data #
+        #############
 
-        # If the file exists, initialize the fiducial values
+        # If the fiducial file exists, read it. Otherwise it will be computed and written to a file in the function loglkl()
+
+        # Initialize the flag stating whether fiducial file exists. Will be set to true if it does.
         self.fid_values_exist = False
 
+        # Create arrays in which the fiducial values of H(z), D(z), sgima_v(z), sigma_p(z), P_galaxy(k,z,mu)
+        # will be stored when reading the dicuail model file (with z running over the the center of each bin)
         self.H_fid = np.zeros(self.nbin, "float64")
         self.D_A_fid = np.zeros(self.nbin, "float64")
         self.sigma_v_fid = np.zeros(self.nbin, "float64")
         self.sigma_p_fid = np.zeros(self.nbin, "float64")
         self.P_obs_fid = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")
 
+        # Create arrays in which the growth factor will be stored
+        # With scale-independent option: f(z)
         if self.scale_dependent_growth_factor_f is False:
             self.f_fid = np.zeros(self.nbin, "float64")
             self.f_cb_fid = np.zeros(self.nbin, "float64")
+        # With scale-dependent option: f(k,z,mu)
         else:
             self.f_fid = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")
             self.f_cb_fid = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")
 
+        # What should be the fiducial file name if it exists
         fid_file_path = os.path.join(self.data_directory, self.fiducial_file)
 
+        # Open file and read it if it exists
         if os.path.exists(fid_file_path+".npz"):
             self.fid_values_exist = True
             fid_file = np.load(fid_file_path+".npz")
 
-            if not np.isclose(
-                fid_file["grid_shape"], (self.k_size, self.nbin, self.mu_size)
-            ).all():
+            if not np.isclose(fid_file["grid_shape"], (self.k_size, self.nbin, self.mu_size)).all():
                 warnings.warn(
                     "The amount of k, z, or mu bins has changed between fiducial and now.\n Fiducial shape = {}, new shape = {}. \n Please remove old fiducial and generate a new one".format(
                         fid_file["grid_shape"], (self.k_size, self.nbin, self.mu_size)
@@ -95,13 +118,24 @@ class euclid_spectroscopic(Likelihood):
                     self.f_cb_fid[:, :, :] = fid_file["f_cb"]
             except ValueError as VE:
                 warnings.warn(
-                    "The scale dependance of the grothrate has changed between the fiducial and now."
+                    "The scale dependance of the growth rate has changed between the fiducial and now."
                 )
                 raise VE
 
         else:
-            # the fiducial file will be created in the loglkl() function below
-            # therefore we need to extract the h fiducial value from the data
+            # The fiducial file will be created in the loglkl() function below.
+            # Before that, we need to extract the h fiducial value from the input file,
+            # in order to compute the shot noise and the fiducial volume.
+            # At this point, we have not yet created a chain, so we cannot use
+            #    data.mcmc_parameters['h']['current']
+            # Also, we have not called CLASS, so we cannot use
+            #    cosmo.h()
+            # We can only use the central value passed by the user in the .param file,
+            #    data.parameters["h"][0]
+            # Note that this is consistent only if the fiducial file is created with the
+            # option '-f 0'. Otherwise, h_fid here would not be the same as h_fid in the
+            # fiducial (data) file.
+            # Anyway, in lnlkl, there is an automatic check that this is done consistently.
             try:
                 self.h_fid = data.parameters["h"][0]
             except KeyError as kk:
@@ -112,13 +146,21 @@ class euclid_spectroscopic(Likelihood):
                 )
                 raise
 
-        # TODO calculate the fiducial volums (not just for Euclid fiducial)
+        # Additional survey specifications that depend on h_fid:
+
+        # Galaxy density
         self.gal_density_fid = (
             np.array([6.86e-4, 5.58e-4, 4.21e-4, 2.61e-4]) * self.h_fid**3
         )
+
+        # Shot noise
         self.P_shot_fid = 1 / (self.gal_density_fid)
+
+        # Fiducial volume
         self.V_fid = np.array([7.94, 9.15, 10.05, 16.22]) * 1e9 / (self.h_fid**3)
 
+        # Nuisance parameters if euclid_spectroscopic.NonLinError = 'marginalized':
+        # (simga_v,sigma_p) in each bin
         if self.NonLinError == "marginalized":
             self.nuisance += [
                 "sigma_v0",
@@ -133,28 +175,37 @@ class euclid_spectroscopic(Likelihood):
 
         return
 
+    # Compute Log(likelihood) = -chi2/2
+
     def loglkl(self, cosmo, data):
+
         np.set_printoptions(precision=16)
 
-        # Define the k values in (1/Mpc) for the integration (from kmin to kmax), at which
-        # the spectrum will be computed (and stored for the fiducial model)
+        # Define the k values in (1/Mpc)  at which the spectrum will be computed
+        # (and stored for the fiducial model).
+        # The integration boundaries (kmin, kmax) were defined in euclid_spectroscopic.data
+        # in units of h/Mpc. Multiply by h to get them in 1/Mpc. Use however h_fid to get
+        # some fixed integration boundaries in 1/Mpc.
         self.k_fid = np.logspace(
             log10(self.kmin * self.h_fid),
             log10(self.kmax * self.h_fid),
             num=self.k_size,
         )
 
+        # Get h, H(z), r(z), D_A(z) for the current model
         self.h = cosmo.h()
-
         r, H = cosmo.z_of_r(self.z_mean)
         D_A = np.zeros(self.nbin, "float64")
         for i in range(len(D_A)):
             D_A[i] = cosmo.angular_distance(self.z_mean[i])
 
+        # Infer sigma_r(z) (spectroscopic redshift error)
         sigma_r = self.spectroscopic_error / H
         if self.spectroscopic_error_z_dependent:
             sigma_r *= 1 + self.z_mean
 
+        # Nuisance parameters: array of ln(b * sigma_8)(z)
+        # Accounting for marginalisation over bias
         lnbsigma8 = np.array(
             [
                 data.mcmc_parameters["lnbsigma8_0"]["current"]
@@ -181,6 +232,7 @@ class euclid_spectroscopic(Likelihood):
             q_orth = self.D_A_fid / D_A
             q_parr = H / self.H_fid
 
+        # infer the list of observed k
         self.k = (
             self.k_fid[:, None, None]
             * q_orth[None, :, None]
@@ -191,9 +243,10 @@ class euclid_spectroscopic(Likelihood):
             )
         )
 
-        # if you want to reproduce the Euclid IST:F wrong results with the h-bug rescale here the k as in the comment
-        #    self.k *= self.h / self.h_fid  # "A rescaling so nice we had to do it twice"
+        # if you want to reproduce the old Euclid IST:F results with the h-bug, rescale here the k as in the comment:
+        #    self.k *= self.h / self.h_fid
 
+        # infer the list of osberved mu
         self.mu = (
             self.mu_fid[None, :]
             * q_parr[:, None]
@@ -205,10 +258,11 @@ class euclid_spectroscopic(Likelihood):
             )
         )
 
-        ###############################
-        # Compute the growth factor f #
-        ###############################
+        ######################################
+        # Compute the growth factors D and f #
+        ######################################
 
+        # Do it for total matter (no subscript or _mm) and baryon+CDM only (_cb)
         if self.scale_dependent_growth_factor_f is False:
             f = np.zeros((self.nbin), "float64")
             f_cb = np.zeros((self.nbin), "float64")
@@ -266,10 +320,14 @@ class euclid_spectroscopic(Likelihood):
                         zz, self.k[index_k, index_z, :], grid=False
                     )
 
+        # Get it for fiducial model
         if self.fid_values_exist is True:
             f_fid = self.f_fid
 
-        # Compute the power spectrum for a given k range
+        ########################################################################################
+        # Compute the power spectra P (matter) and P_cb for a wide k range used for dewiggling #
+        ########################################################################################
+
         k_long_min = self.dewiggling_k_min_invMpc
         k_long_max = self.dewiggling_k_max_invMpc
         num_k_long = (
@@ -287,6 +345,7 @@ class euclid_spectroscopic(Likelihood):
                 pk_long[index_k, index_z] = np.log(cosmo.pk_lin(kval, zval))
                 pk_cb_long[index_k, index_z] = np.log(cosmo.pk_cb_lin(kval, zval))
 
+        # Infer corresponding sigma8(z) and sigma8_cb(z)
         sigma8_cb_of_z = np.array(
             [cosmo.sigma_cb(R=8 / cosmo.h(), z=zi) for zi in self.z_mean]
         )
@@ -294,6 +353,8 @@ class euclid_spectroscopic(Likelihood):
             [cosmo.sigma(R=8 / cosmo.h(), z=zi) for zi in self.z_mean]
         )
 
+        # Depending on input options, pick up the matter or clustering (_cb) growth factor,
+        # power spectrum and sigma8 one for the likelihood
         if self.use_tracer == "matter":
             f_tracer = f
             pk_tracer_long = pk_long
@@ -309,8 +370,12 @@ class euclid_spectroscopic(Likelihood):
             )
             raise ValueError
 
+        #############################
+        # Power spectrum dewiggling #
+        #############################
+
+        # Savitzky-Golay filter
         if self.dewiggle == "savgol_filter":
-            # same dewiggle method as the Euclid Collaboration
 
             pk_tracer_nobao_long = np.empty_like(pk_tracer_long)
             window_len = int(self.savgol_width / np.log(1.0 + self.dewiggling_dlnk))
@@ -326,29 +391,30 @@ class euclid_spectroscopic(Likelihood):
             )
             raise ValueError
 
-        pk_lin = np.zeros(
-            (self.k_size, self.nbin, self.mu_size), "float64"
-        )  # in (Mpc)**3
-        pk_tracer_lin = np.zeros(
-            (self.k_size, self.nbin, self.mu_size), "float64"
-        )  # in (Mpc)**3
-        pk_tracer_nobao = np.zeros(
-            (self.k_size, self.nbin, self.mu_size), "float64"
-        )  # in (Mpc)**3
+        ################################################
+        # Build the galaxy power spectrum step by step #
+        ################################################
 
+        # Initialise grid of P_matter, P_clustering, P_dewiggled
+        pk_lin = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")  # in (Mpc)**3
+        pk_tracer_lin = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")  # in (Mpc)**3
+        pk_tracer_nobao = np.zeros((self.k_size, self.nbin, self.mu_size), "float64")  # in (Mpc)**3
+
+        # Initialize another grid for the matter power spectrum, which will be integrated over
+        # to predict the sigma_p(z) of fingers-of-God and sigma_v(z) of infrared resummation
         pk_sigmavp = np.zeros((self.k_size, self.nbin), "float64")
         k_sigmavp = np.geomspace(0.001, 5, self.k_size)
 
         for index_z in range(self.nbin):
-            pk_lin_spline = interpolate.interp1d(k_long, pk_long[:, index_z])
-            pk_tracer_lin_spline = interpolate.interp1d(
+            pk_lin_spline = interp1d(k_long, pk_long[:, index_z])
+            pk_tracer_lin_spline = interp1d(
                 k_long, pk_tracer_long[:, index_z]
             )
-            pk_tracer_nobao_spline = interpolate.interp1d(
+            pk_tracer_nobao_spline = interp1d(
                 k_long, pk_tracer_nobao_long[:, index_z]
             )
-            # This is open for debate if we should use P_m or P_cb for sigma_v .
-            # The idea behind our choice of P_m is, that if it should be the same as sigma_p then we should use
+            # It is open for debate whether we should use P_m or P_cb for sigma_v .
+            # The idea behind our choice of P_m is that, if it should be the same as sigma_p, we should use
             # P_m as this is a gravitational effect and not related to the tracer bias.
             # We could use diffrent sigma_v and sigma_p using P_cb and P_m respectively.
             pk_sigmavp[:, index_z] = np.exp(pk_lin_spline(k_sigmavp[:]))
@@ -363,12 +429,16 @@ class euclid_spectroscopic(Likelihood):
                     pk_tracer_nobao_spline(self.k[:, index_z, index_mu])
                 )
 
+        # Scheme in wich sigma_p and sigma_v are set to zero (which gives the linear power spectrum)
         if self.NonLinError == "linear":
             # linear setting
             sigma_v = np.zeros((self.nbin), "float64")
             sigma_p = np.zeros((self.nbin), "float64")
+
+        # Scheme in wich sigma_p and sigma_v are predicted theoretically given the power spectrum
         elif self.NonLinError == "predicted":
             # nonlinear pessimistic and optimistic setting
+            # Compute the sigma's by integrating over the power spectrum
             if self.fid_values_exist is False:
                 sigma_v = np.sqrt(
                     1 / (6 * np.pi**2) * simpson(pk_sigmavp, x=k_sigmavp, axis=0)
@@ -377,6 +447,8 @@ class euclid_spectroscopic(Likelihood):
             else:
                 sigma_v = self.sigma_v_fid
                 sigma_p = self.sigma_p_fid
+
+        # Scheme in which sigma_p and sigma_v are floated as nuisance parameters
         elif self.NonLinError == "marginalized":
             # nonlinear superpessimistic setting, varying freely sigma_p and sigma_v at each bin
             sigma_v = np.array(
@@ -412,6 +484,9 @@ class euclid_spectroscopic(Likelihood):
             )
             raise ValueError
 
+        # Compute the functions describing the fingers-of-God,
+        # Bias and ras corrections from the kaiser formula,
+        # and the smoothing factor accounting for infrared resummation
         if self.fid_values_exist is False:
             fz_fog = f
             fz_kaiser = f_tracer
@@ -426,6 +501,7 @@ class euclid_spectroscopic(Likelihood):
             fz_kaiser = fz_kaiser[None, :, None]
             fz_dewigg = fz_dewigg[None, :, None]
 
+        # Alockock-Paczynski prefactor
         F_AP = q_parr * q_orth**2
 
         # Linear Kaiser factor F_Kaiser(k,z,mu)
@@ -435,12 +511,15 @@ class euclid_spectroscopic(Likelihood):
             + fz_kaiser * sigma8_tracer_of_z[None, :, None] * self.mu[None, :, :] ** 2
         )
 
+        # Fingers-of-God function
         F_FOG = 1 / (
             1 + (fz_fog * self.k * self.mu[None, :, :] * sigma_p[None, :, None]) ** 2
         )
 
+        # Function accounting for spectroscopic redhsift error
         F_z = np.exp(-((self.k * self.mu[None, :, :] * sigma_r[None, :, None]) ** 2))
 
+        # Infrared resummation (smoothing the wiggles)
         fac = np.exp(
             -self.k**2
             * sigma_v[None, :, None] ** 2
@@ -448,6 +527,8 @@ class euclid_spectroscopic(Likelihood):
         )
         P_tracer_dw = pk_tracer_lin * fac + pk_tracer_nobao * (1 - fac)
 
+        # Finally, (observable) galaxy power spectrum accouting for all these effects,
+        # but still without shot noise
         self.P_obs = (
             F_AP[None, :, None]
             * (F_Kaiser) ** 2
@@ -457,8 +538,7 @@ class euclid_spectroscopic(Likelihood):
             * F_z
         )
 
-        # For plotting P_m and P_nw:
-        # To debug the individual components
+        # Plotting P_m and P_nw to debug the individual components
         Pk_debug = False
         if Pk_debug == True:
             debug_file_path = os.path.join(self.data_directory, "euclid_GC_k.npy")
@@ -515,16 +595,28 @@ class euclid_spectroscopic(Likelihood):
             ]
         )
 
+        # Add shot noise to galaxy spectrum
         self.P_obs += self.P_shot[None, :, None] + self.P_shot_fid[None, :, None]
 
-        # If the fiducial model does not exist, recover the power spectrum and
-        # store it, then exit.
+        ###########################
+        # Store fiducial spectrum #
+        ###########################
 
+        # If the fiducial model does not exist, store it, then exit.
+        # (The user should then start a new run that will use this fiducial file).
         if self.fid_values_exist is False:
             fid_file_path = os.path.join(self.data_directory, self.fiducial_file)
             fiducial_cosmo = dict()
             for key, value in data.mcmc_parameters.items():
                 fiducial_cosmo[key] = value["current"] * value["scale"]
+
+            # check that h_fid was defined consitently
+            if (self.h_fid != cosmo.h()):
+                print("\n")
+                warnings.warn(
+                "Mismatch between h_fid=%e and cosmo.h()=%e, probably caused by the fact that you omitted the option '-f 0' in the preliminary MontePython run that creates the fiducial file. With the euclid_spectroscopic likelihood, you are assumed to be using '-f 0' at this step.\n"
+                % (self.h_fid, cosmo.h()))
+                raise ValueError
 
             np.savez(
                 fid_file_path,
@@ -547,18 +639,32 @@ class euclid_spectroscopic(Likelihood):
 
             return 1j
 
+        ################################
+        # Compute chi2 = -2 * log(lkl) #
+        ################################
+
         chi2 = 0.0
         for index_z in range(self.nbin):
             mu_integrant = np.zeros((self.mu_size), "float64")
             for index_mu in range(self.mu_size):
+                # Retrieve integrand, essentially:  [(theory - fiducial)/theory power spectrum]**2
                 k_integrant = self.array_integrand(index_z, index_mu)
+                # First, integrate it over k
                 mu_integrant[index_mu] = simpson(k_integrant[:], x=self.k_fid[:])
+            # Then, integrate it over mu
             chi2_of_z = simpson(mu_integrant[:], x=self.mu_fid[:])
+            # Add contributionf rom different z
             chi2 += chi2_of_z
 
+        # return log(lkl) = - chi2/2
         return -chi2 / 2.0
 
+    # Auxilliary function computing the integrand that appears in the likelihood
+    # and that gets integrated over (k,mu,z)
+    # It is essentially [(theory - fiducial)/theory power spectrum]**2 weighted by volume
+
     def array_integrand(self, index_z, index_mu):
+
         integrand = (
             self.V_fid[index_z]
             * self.k_fid[:] ** 2
