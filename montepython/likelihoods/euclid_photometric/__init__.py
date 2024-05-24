@@ -551,9 +551,9 @@ class euclid_photometric(Likelihood):
             t_spline = time()
             print("Covariance obtained in:", t_spline-t_debug)
 
-        ##############################################################
-        # Compute likelihood, pptionally, adding a theoretical error #
-        ##############################################################
+        #############################################################
+        # Compute likelihood, optionally adding a theoretical error #
+        #############################################################
 
         # JL: give a reference to the way we treat theoretical errors
         # JL: what is T_Rerr_dict? Related to theoretical error? How?

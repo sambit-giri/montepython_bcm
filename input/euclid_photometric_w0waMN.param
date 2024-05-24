@@ -49,9 +49,12 @@ data.cosmo_arguments['deg_ncdm'] = 3
 data.cosmo_arguments['P_k_max_1/Mpc'] = 50.
 data.cosmo_arguments['k_per_decade_for_pk'] = 50.
 data.cosmo_arguments['k_per_decade_for_bao'] = 50.
-data.cosmo_arguments['non linear']= 'hmcode2020'
+# Warning: to reproduce the results of the Euclid neutrino sensitivity paper,
+# you should set to hmcode2020
+#data.cosmo_arguments['non linear']= 'hmcode2020'
+data.cosmo_arguments['non linear']= 'halofit'
 data.cosmo_arguments['nonlinear_min_k_max']= 80.
- 
+
 # Number of steps taken, by default (overwritten by the -N command)
 data.N=10
 # Number of accepted steps before writing to file the chain. Larger means less
