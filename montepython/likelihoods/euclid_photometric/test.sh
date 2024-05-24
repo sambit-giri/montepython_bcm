@@ -2,7 +2,8 @@
 
 ### This script shows how to run the euclid_photometric likelihood alone,
 ### with the provided input file and covariance matrix
-### USAGE:  launch this script from the montepython main dir
+### USAGE:  launch this script from the montepython main direactory
+### for instance: 'source montepython/likelihoods/euclid_photometric/test.sh'
 
 INPUT=input/euclid_photometric_w0waMN.param
 CHAINS=chains/euclid_photometric

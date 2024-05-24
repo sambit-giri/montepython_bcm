@@ -1,3 +1,12 @@
+#####################################################
+# Module dealing with (optional) theoretical errors #
+# in the euclid_photometric likelihood              #
+#####################################################
+
+# Reflects the theoretical error model described in [JL: missing reference]
+
+# Written by Santiago Casas and Sefa Pamuk (2023)
+
 import numpy as np
 from scipy.integrate import trapz
 from scipy.interpolate import interp1d

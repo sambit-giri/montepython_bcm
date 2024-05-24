@@ -1,3 +1,15 @@
+##########################################################
+# galaxy-to-matter bias in models with massive neutrinos #
+##########################################################
+
+# Galaxies or halos trace only the clustering components (baryon + CDM), which is
+# not the same as total matter in presence massive neutrinos (see e.g. 1505.07148)
+
+# Then the galaxy-to-matter bias can eb estimated from the linear spectra
+# P_cb and P_m inferred the Boltzmann solver (see e.g. 1807.04672)
+
+# Written by Sefa Pamuk (2023)
+
 import numpy as np
 from scipy.interpolate import RectBivariateSpline, UnivariateSpline
 

@@ -1,3 +1,12 @@
+##################################################################################################
+# Interface module between euclid_photometric likelihood and BCemu emulator of baryonic feedback #
+##################################################################################################
+
+# BCemu python package available at https://github.com/sambit-giri/BCemu
+# Developped by Sambit Giri and Aurel Schneider, see arXiv:2108.08863 (physical model in arXiv:1810.08629)
+
+# Interface with Euclid likelihood witten by J. Schwagereit and Sefa Pamuk (2023)
+
 import BCemu
 import numpy as np
 from scipy.interpolate import RectBivariateSpline

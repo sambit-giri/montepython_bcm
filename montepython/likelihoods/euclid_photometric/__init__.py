@@ -1,11 +1,13 @@
-########################################################
-# Euclid photometric likelihood
-########################################################
-# written by Maike Doerenkamp in 2020
-# following the recipe of 1910.09237 (Euclid preparation: VII. Forecast validation for Euclid
-# cosmological probes)
-# (adapted from euclid_lensing likelihood)
-# edited by Lena Rathmann in 2021
+##########################################################################################
+# Euclid lensing, photometric galaxy clustering and cross-correlation (3x2pt) likelihood #
+##########################################################################################
+
+# - Based on an earlier euclid_lensing likelihood initiated by A. Audren and J. Lesgourgues 1210.7183
+# - Improved by Sprenger et al. 1801.08331
+# - Further developped to include clustering, cross-correlation and match IST:Fisher recipe by
+#   S. Casas, M. Doerenkamp, J. Lesgourgues, L. Rathmann, Sabarish V., N. Schoeneberg
+# - validated against CosmicFish and IST:Fisher in 2303.09451
+# - further improved and generalised to massive neutrinos by S. Pamuk, S. Casas
 
 from montepython.likelihood_class import Likelihood
 
@@ -25,17 +27,20 @@ from scipy.special import erf
 
 class euclid_photometric(Likelihood):
 
+    # Initialization performed a single time at the beginning of the run
+
     def __init__(self, path, data, command_line):
         self.debug_save  = False
         Likelihood.__init__(self, path, data, command_line)
 
         # Force the cosmological module to store Pk for redshifts up to
-        # max(self.z) and for k up to k_max
+        # euclid_photometric.zmax and for k up to euclid_photometric.k_max_h_by_Mpc
         self.need_cosmo_arguments(data, {'output': 'mPk, dTk'})
         self.need_cosmo_arguments(data, {'z_max_pk': self.zmax})
         self.need_cosmo_arguments(data, {'P_k_max_1/Mpc': 1.5*self.k_max_h_by_Mpc})
 
-        # Define array of l values, evenly spaced in logscale
+        # Define array of l values, evenly spaced in logscale,
+        # with different lmax for WL, GC and XC
         if self.lmax_WL > self.lmax_GC:
             self.l_WL = np.logspace(np.log10(self.lmin), np.log10(self.lmax_WL), num=self.lbin, endpoint=True)
             self.idx_lmax = int(np.argwhere(self.l_WL >= self.lmax_GC)[0])
@@ -62,53 +67,58 @@ class euclid_photometric(Likelihood):
         if self.debug_save :
             np.savetxt('ls.txt',self.l_GC)
 
-        #########################################
-        # Find distribution of n(z) in each bin #
-        #########################################
+        #################################################
+        # Find galaxy distribution eta_i(z) in each bin #
+        #################################################
 
         # Create the array that will contain the z boundaries for each bin.
-
+        # Hard-coded, excepted the lowest and highest boundaries passed in euclid_photometric.data
         self.z_bin_edge = np.array([self.zmin, 0.418, 0.560, 0.678, 0.789, 0.900, 1.019, 1.155, 1.324, 1.576, self.zmax])
         self.z_bin_center = np.array([(self.z_bin_edge[i]+self.z_bin_edge[i+1])/2 for i in range(self.nbin)])
 
         # Fill array of discrete z values
         self.z = np.linspace(self.zmin, self.zmax, num=self.nzmax)
 
-        # Fill distribution for each bin (convolving with photo_z distribution)
-        # n_i = int n(z) dz over bin
+        # Fill distribution for each bin (taking into account photo_z distribution)
+        # eta_i = eta(z) * int dz_ph photoerror(z_ph|z) where the integral is over bin i (zi- < zp < zi+)
+
+        # This will be eta_i(z)
         self.eta_z = np.zeros((self.nzmax, self.nbin), 'float64')
+
+        # This will be: int dz_ph p_ph(z_ph|z) over a given bin range [zi-,zi+]. It is still a function of z.
         self.photoerror_z = np.zeros((self.nzmax, self.nbin), 'float64')
+
         for Bin in range(self.nbin):
             for nz in range(self.nzmax):
                 z = self.z[nz]
                 self.photoerror_z[nz,Bin] = self.photo_z_distribution(z,Bin+1)
-                self.eta_z[nz, Bin] = self.photoerror_z[nz,Bin] * self.galaxy_distribution(z)
-        if self.debug_save : np.savetxt('./photoz.txt',self.photoerror_z) ## agrees
-        if self.debug_save : np.savetxt('./unnorm_nofz.txt',self.eta_z) ## agrees
-        # integrate eta(z) over z (in view of normalizing it to one)
-        self.eta_norm = np.zeros(self.nbin, 'float64')
-        #norm = np.array([trapz([self.photo_z_distribution(z1, i+1) for z1 in zint],dx=dz) for i in range(self.nbin)])
+                # eta_i(z) = eta(z) * [int dz_ph photoerror(z_ph|z)]
+                self.eta_z[nz, Bin] = self.galaxy_distribution(z) * self.photoerror_z[nz,Bin]
+
+        if self.debug_save : np.savetxt('./photoz.txt',self.photoerror_z)
+        if self.debug_save : np.savetxt('./unnorm_nofz.txt',self.eta_z)
+
+        # Normalize eta_i(z) to one
         for Bin in range(self.nbin):
-            #self.eta_z[:,Bin] /= trapz(self.eta_z[:,Bin],dx=self.zmax/self.nzmax)
             self.eta_z[:,Bin] /= trapz(self.eta_z[:,Bin],self.z[:])
 
         if self.debug_save : np.savetxt('./n.txt',self.eta_z)
-        # the normalised galaxy distribution per bin (dimensionless)
-        #print('eta_z: ', self.eta_z)
-        # the number density of galaxies per bin in inv sr
-        self.n_bar = self.gal_per_sqarcmn * (60.*180./np.pi)**2
-        self.n_bar /= self.nbin
+
+        # Number density of galaxies per bin in inverse square radian
+        self.n_bar = self.gal_per_sqarcmn * (60.*180./np.pi)**2 / self.nbin
 
         ###########################
         # Add nuisance parameters #
         ###########################
 
+        # For GC: bias parameters
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
             self.bias_names = []
             for ibin in range(self.nbin):
                 self.bias_names.append('bias_'+str(ibin+1))
             self.nuisance += self.bias_names
 
+        # For WL: intrinsic alignement parameters
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
             self.nuisance += ['aIA', 'etaIA', 'betaIA']
 
@@ -123,6 +133,8 @@ class euclid_photometric(Likelihood):
                 lum[index] = line.split()[1]
             self.lum_func = interp1d(zlum, lum,kind='linear')
 
+        # If requested: baryonic feedback parameters
+        # (this is a minimal set, if needed, more parameters can be varied and passed to BCemu)
         if self.use_BCemu or (self.fit_different_data and self.data_use_BCemu):
             self.nuisance += ['log10Mc']
             self.nuisance += ['nu_Mc']
@@ -131,7 +143,7 @@ class euclid_photometric(Likelihood):
         # Read data #
         #############
 
-        # If the file exists, read the fiducial values
+        # If the fiducial file exists, read it. Otherwise it will be computed and written to a file in the function loglkl()
         self.fid_values_exist = False
         fid_file_path = os.path.join(self.data_directory, self.fiducial_file+'.npz')
         if os.path.exists(fid_file_path):
@@ -178,10 +190,11 @@ class euclid_photometric(Likelihood):
 
         return
 
+    # Total galaxy distribution eta(z), unnormalized
 
     def galaxy_distribution(self, z):
         """
-        Galaxy distribution returns the function D(z) from the notes
+        Total galaxy distribution eta(z), unnormalized
 
         Modified by S. Clesse in March 2016 to add an optional form of n(z) motivated by ground based exp. (Van Waerbeke et al., 2013)
         See google doc document prepared by the Euclid IST - Splinter 2
@@ -193,10 +206,11 @@ class euclid_photometric(Likelihood):
 
         return galaxy_dist
 
+    # Photometric redhsift error p(z_ph|z) integrated over z_ph within one bin
 
     def photo_z_distribution(self, z, bin):
         """
-        Photo z distribution
+        Photometric redhsift error p(z_ph|z) integrated over z_ph within one bin
 
         z:      physical galaxy redshift
         zph:    measured galaxy redshift
@@ -212,18 +226,20 @@ class euclid_photometric(Likelihood):
         term2 =-cb*f_out*    erf((0.707107*(z-z0-c0*self.z_bin_edge[bin    ]))/(sigma_0*(1+z)))
         term3 = c0*(1-f_out)*erf((0.707107*(z-zb-cb*self.z_bin_edge[bin - 1]))/(sigma_b*(1+z)))
         term4 =-c0*(1-f_out)*erf((0.707107*(z-zb-cb*self.z_bin_edge[bin    ]))/(sigma_b*(1+z)))
+
         return (term1+term2+term3+term4)/(2*c0*cb)
+
+    # Compute Log(likelihood) = -chi2/2
 
     def loglkl(self, cosmo, data):
 
         if self.printtimes:
             t_start = time()
 
-        # One wants to obtain here the relation between z and r, this is done
-        # by asking the cosmological module with the function z_of_r
+        # Relation between redhsuft z and comoving radius r,
+        # inferred from cosmological module with the function z_of_r
         self.r = np.zeros(self.nzmax, 'float64')
         self.dzdr = np.zeros(self.nzmax, 'float64')
-
         self.r, self.dzdr = cosmo.z_of_r(self.z)
 
         # H(z)/c in 1/Mpc
@@ -231,13 +247,17 @@ class euclid_photometric(Likelihood):
         # H_0/c in 1/Mpc
         H0 = cosmo.h()/2997.92458
 
+        # k_min and k_max in 1/Mpc
         self.kmin_in_inv_Mpc = self.k_min_h_by_Mpc * cosmo.h()
         self.kmax_in_inv_Mpc = self.k_max_h_by_Mpc * cosmo.h()
 
+        # l = array of multipoles up to max(lmax_WL, lmax_GC)
         if self.l_array == 'WL':
             l = self.l_WL
         if self.l_array == 'GC':
             l = self.l_GC
+
+        # k = corresponding array using Limber
         k =(l[:,None]+0.5)/self.r
 
         if self.printtimes:
@@ -247,27 +267,30 @@ class euclid_photometric(Likelihood):
         ######################
         # Get power spectrum #
         ######################
-        # [P(k)] = Mpc^3
-        # Get power spectrum P(k=(l+1/2)/r,z) from cosmological module
+
+        # Get non-linear and linear matter power spectrum P(k=(l+1/2)/r,z) in Mpc^3 from cosmological module
         Pk_m_nl_grid, k_grid, z_grid = cosmo.get_pk_and_k_and_z()
         Pk_m_l_grid, _, _ = cosmo.get_pk_and_k_and_z(nonlinear=False)
 
+        # Order them by decreasing redhsift / growing time
         z_grid = z_grid[::-1]
         Pk_m_nl_grid = np.flip(Pk_m_nl_grid,axis=1)
         Pk_m_l_grid = np.flip(Pk_m_l_grid,axis=1)
 
+        # Spline in view of interpolation
         Pk_m_nl_spline = RectBivariateSpline(k_grid,z_grid,Pk_m_nl_grid)
         Pk_m_l_spline = RectBivariateSpline(k_grid,z_grid,Pk_m_l_grid)
 
+        # Spectra P(l,z) sampled at required k(l,z) values.
+        # The spectra are zero when k(l,z) is outside of the range [kmin, kmax].
         Pk_m_nl = np.zeros_like(k, 'float64')
         Pk_m_l  = np.zeros_like(k, 'float64')
-
         for iz, zi in enumerate(self.z):
             pknn_mask = np.where((k[:,iz]>self.kmin_in_inv_Mpc) & (k[:,iz]<self.kmax_in_inv_Mpc))
-
             Pk_m_nl[pknn_mask, iz] = np.reshape(Pk_m_nl_spline(k[pknn_mask,iz],zi),Pk_m_nl[pknn_mask, iz].shape)
             Pk_m_l [pknn_mask, iz] = np.reshape(Pk_m_l_spline(k[pknn_mask,iz],zi),Pk_m_l [pknn_mask, iz].shape)
 
+        # Non-linear spectrum P_NL(l,z) copied to Pk_WL and Pk_GC
         Pk_WL = copy(Pk_m_nl)
         Pk_GC = copy(Pk_m_nl)
 
@@ -276,30 +299,34 @@ class euclid_photometric(Likelihood):
             print("Power spectrum obtained in:", t_power-t_init)
 
         ########################
-        # Boosts and Emulators #
+        # Boosts and emulators #
         ########################
 
+        # Multiply only Pk_WL by baryonic feedback. You could multiply also Pk_GC depending on your physical assumptions.
         if self.use_BCemu:
             import baryonic_feedback
             # choice to only effect the Lensing power spectrum by baryonic effects
             Pk_WL *= baryonic_feedback.get_boost_baryonic_feedback(cosmo,data,self,k,self.z)
 
+        # Pk_GC defined as gemetric mean of Pk_WL and Pk_GC
         Pk_XC = np.sqrt(Pk_GC * Pk_WL)
 
         if self.printtimes:
             t_nonlinear = time()
             print("Nonlinear effects and Boosts obtained in", t_nonlinear - t_power)
 
-        #####################
-        # Get Growth Faktor #
-        #####################
+        ############################
+        # Get growth factor D(z,k) #
+        ############################
 
+        # Scale-independent case passed by comsology module
         if self.scale_dependent_f == False:
             D_z= np.ones_like((self.nzmax), 'float64')
             for iz, zi in enumerate(self.z):
                 D_z[iz] = cosmo.scale_independent_growth_factor(zi)
             D_z= D_z[None,:]
 
+        # Scale-dependent case (e.g. with massive neutrinos) obtained directly from [P_NL(z)/P_NL(0)]^1/2
         elif self.scale_dependent_f ==True:
             D_z =np.ones_like(k, 'float64')
             for iz, zi in enumerate(self.z):
@@ -315,31 +342,37 @@ class euclid_photometric(Likelihood):
         ################################################
         # in units of [W] = 1/Mpc
 
+        # WL / cosmic shear case
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
 
-            # cosmic shearing
+            # Contribution from matter power spectrum
             integral = 3./2.*H0**2. *cosmo.Omega_m()*self.r[None,:,None]*(1.+self.z[None,:,None])*self.eta_z.T[:,None,:]*(1-self.r[None,:,None]/self.r[None,None,:])
             W_gamma  = np.trapz(np.triu(integral),self.z,axis=-1).T
 
+            # Contribution from intrinsic alignement
             W_IA = self.eta_z *self.H_z[:,None]
             C_IA = 0.0134
             A_IA = data.mcmc_parameters['aIA']['current']*(data.mcmc_parameters['aIA']['scale'])
             eta_IA = data.mcmc_parameters['etaIA']['current']*(data.mcmc_parameters['etaIA']['scale'])
             beta_IA = data.mcmc_parameters['betaIA']['current']*(data.mcmc_parameters['betaIA']['scale'])
-
             F_IA = (1.+self.z)**eta_IA * (self.lum_func(self.z))**beta_IA
+
+            # Sum of the two
             W_L = W_gamma[None,:,:] - A_IA*C_IA*cosmo.Omega_m()*F_IA[None,:,None]/D_z[:,:,None] *W_IA[None,:,:]
 
+        # GC / galaxy clustering case
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
-            # Compute window function W_G(z) of galaxy clustering for each bin:
 
+            # Convert bias parameters passed as nuisance parameters into an array 'galaxy_bias' of biases at each z
+            # See 2303.09451 for detials on different presciptions
             bias_values = np.zeros((self.nbin),'float64')
             for ibin in range(self.nbin):
                 bias_values[ibin] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
-
+            # First prescription
             if self.bias_model == 'binned_constant' :
                 galaxy_bias = bias_values[None,None,:]
 
+            # Second prescription
             elif self.bias_model == 'binned' :
                 biaspars = dict()
                 for ibin in range(self.nbin):
@@ -358,16 +391,18 @@ class euclid_photometric(Likelihood):
                 vbinbis = np.vectorize(binbis)
                 galaxy_bias = vbinbis(self.z)[None,:,None]
 
+            # Third prescription
             elif self.bias_model == 'interpld' :
                 biasfunc = interp1d(self.z_bin_center, bias_values, bounds_error=False, fill_value="extrapolate")
                 galaxy_bias = biasfunc(self.z)[None,:,None]
 
-            # Handle the neutrino induced scale dependant bias following the prescription of the neurino paper
+            # Handle the neutrino-induced scale-dependant bias following the prescription of 2405.06047
             if self.use_tracer == 'clustering':
                 import neutrino_bias_model
                 galaxy_bias = np.ones(self.lbin)[:,None,None] * galaxy_bias
                 galaxy_bias *= np.sqrt(neutrino_bias_model.get_boost_neutrino_bias(cosmo, data, self, Pk_m_nl_grid, k, self.z)[:,:, None])
 
+            # Now, compute the window functions
             W_G = np.zeros((self.nzmax, self.nbin), 'float64')
             W_G = galaxy_bias * self.H_z[None,:,None] * self.eta_z[None,:,:]
 
@@ -375,24 +410,29 @@ class euclid_photometric(Likelihood):
             t_window = time()
             print("window function obtained in:", t_window-t_nonlinear)
 
-        ###########
-        # Calc Cl #
-        ###########
+        ##################
+        # Compute the Cl #
+        ##################
         # dimensionless
 
         nell_WL = len(self.l_WL)
         nell_GC = len(self.l_GC)
         nell_XC = len(self.l_XC)
 
-        # the indices are ell, z, bin_i, bin_j in the int and ell, bin_i, bin_j in the Ceeell
+        # The indices are [ell, z, bin_i, bin_j] in the integrands (ending in _int)
+        # and [ell, bin_i, bin_j] in the Cl
+
+        # WL case
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
             Cl_LL_int = W_L[:,:,:, None] * W_L[:,:, None,:] * Pk_WL[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_LL     = trapz(Cl_LL_int,self.z,axis=1)[:nell_WL,:,:]
 
+        # GC case
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
             Cl_GG_int = W_G[:,:,:, None] * W_G[:,:, None,:] * Pk_GC[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_GG     = trapz(Cl_GG_int,self.z,axis=1)[:nell_GC,:,:]
 
+        # cross-correlation XC case
         if 'WL_GCph_XC' in self.probe:
             Cl_LG_int = W_L[:,:,:, None] * W_G[:,:, None,:] * Pk_XC[:,:, None, None] / self.H_z[None,:, None, None] / self.r[None,:, None, None] / self.r[None,:, None, None]
             Cl_LG     = trapz(Cl_LG_int,self.z,axis=1)[:nell_XC,:,:]
@@ -402,9 +442,9 @@ class euclid_photometric(Likelihood):
             t_cell = time()
             print("Cell calculated in:", t_cell-t_window)
 
-        ####################
-        # Plot Pk and Cl's #
-        ####################
+        #################################
+        # In option, may plot Pk and Cl #
+        #################################
 
         # do you want to save the power spectrum?
         if self.save_PS:
@@ -413,7 +453,7 @@ class euclid_photometric(Likelihood):
             np.savez(debug_file_path, Pk_WL=Pk_WL, Pk_GC=Pk_GC, k=k, z=self.z)
             print("Printed P(k,z)")
 
-        # do you want to save the Ceeell?
+        # do you want to save the (noise-free) Cl?
         if self.save_Cell:
             debug_file_path = os.path.join(self.data_directory, 'euclid_photometric_Cls.npz')
             if 'WL_GCph_XC' in self.probe:
@@ -427,18 +467,19 @@ class euclid_photometric(Likelihood):
             t_debug = time()
             print("Debug options obtained in:" , t_debug-t_cell)
 
-        #########
-        # Noise #
-        #########
+        #####################
+        # Add noise spectra #
+        #####################
         # dimensionless
 
+        # Constant noise spectra for each type
         self.noise = {
            'LL': self.rms_shear**2./self.n_bar,
            'LG': 0.,
            'GL': 0.,
            'GG': 1./self.n_bar}
 
-        # add noise to Ceeells after saving to better compare
+        # Add noise to Cl
         for i in range(self.nbin):
             if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
                 Cl_LL[:,i,i] += self.noise['LL']
@@ -448,17 +489,21 @@ class euclid_photometric(Likelihood):
                 Cl_GL[:,i,i] += self.noise['GL']
                 Cl_LG[:,i,i] += self.noise['LG']
 
-        #######################
-        # Create fiducial file
-        #######################
+        #################################################
+        # If needed, save coomputed Cl in fiducial file #
+        #################################################
 
         if self.fid_values_exist is False:
-            # Store the values now, and exit.
+
+            # Define fiducial file name
             fid_file_path = os.path.join(self.data_directory, self.fiducial_file)
+
+            # Create a dictionary with all fiducial parameters
             fiducial_cosmo = dict()
             for key, value in data.mcmc_parameters.items():
                     fiducial_cosmo[key] = value['current']*value['scale']
 
+            # Save this dictionary followed by all available Cl spectra
             if 'WL_GCph_XC' in self.probe:
                 np.savez(fid_file_path,fid_cosmo=fiducial_cosmo, probe=self.probe, ells_LL=self.l_WL, ells_GG=self.l_GC, ells_GL=self.l_XC, Cl_LL = Cl_LL, Cl_GG = Cl_GG, Cl_GL = Cl_GL)
             if 'WL' in self.probe:
@@ -466,16 +511,19 @@ class euclid_photometric(Likelihood):
             if 'GCph' in self.probe:
                 np.savez(fid_file_path,fid_cosmo=fiducial_cosmo, probe=self.probe, ells_GG=self.l_GC, Cl_GG = Cl_GG)
 
+            # Write warning and abort. (The user should then start a new run that will use this fiducial file).
             warnings.warn(
                 "Writing fiducial model in %s, for %s likelihood\n" % (
                     self.data_directory+'/'+self.fiducial_file, self.name))
             return 1j
 
-        #############
-        # Spline Cl #
-        #############
-        # Find C(l) for every integer l
+        ##############################################################
+        # Interpolate Cl at each l to build theory covariance matrix #
+        ##############################################################
 
+        # for each type WL, GC and XC, we do a spline inteprolation of Cl spectra at each l
+        # JL: the overall stucture and motivation for the dictionary Cov_theory_dic is bit
+        # difficult to guess, I would explain where what is this Cov_theory_dic
         Cov_theory_dict = dict()
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
             inter_LL = interp1d(self.l_WL,Cl_LL,axis=0, kind='cubic',fill_value="extrapolate")(self.ells_WL)
@@ -503,29 +551,33 @@ class euclid_photometric(Likelihood):
             t_spline = time()
             print("Covariance obtained in:", t_spline-t_debug)
 
-        ######################
-        # Compute likelihood
-        ######################
+        ##############################################################
+        # Compute likelihood, pptionally, adding a theoretical error #
+        ##############################################################
 
+        # JL: give a reference to the way we treat theoretical errors
+        # JL: what is T_Rerr_dict? Related to theoretical error? How?
         T_Rerr_dict = dict()
         T_Rerr_dict["T_Rerr"] = np.zeros_like(Cov_theory_dict["Cov_theory"])
         if 'WL_GCph_XC' in self.probe:
             T_Rerr_dict["T_Rerr_high"] = np.zeros_like(Cov_theory_dict["Cov_theory_high"])
 
+        # compute chi2 given the theory and observation (=fiducial) covariance matrices
+        # JL: explain the 'partial' stuff (I iundertsand it means without theroetical error,
+        # but this deserves explanations)
         pcompute_chisq =  partial(self.compute_chisq, ells = ells, Cov_observ_dict = self.Cov_observ_dict, Cov_theory_dict = Cov_theory_dict, T_Rerr_dict = T_Rerr_dict)
 
+        # Define nuisance parameters acouting for theoretical error
         eps_l = np.zeros_like(ells)
         if self.theoretical_error != False:
-
-            ######################
-            # Theoretical errors #
-            ######################
             import theoretical_errors
 
+            #JL: needs some expanation and reference
             El_dict = theoretical_errors.get_covariance_error(cosmo, data, self, k, Pk_WL, Pk_GC, Pk_XC, W_L, W_G)
             T_Rerr_dict.update(theoretical_errors.spline_error(self, El_dict))
             eps_l = theoretical_errors.minimize_chisq(self, self.compute_chisq, ells, self.Cov_observ_dict, Cov_theory_dict, T_Rerr_dict)
 
+        # JL: explain this
         chi2 = pcompute_chisq(eps_l)
 
         if self.printtimes:
@@ -535,29 +587,46 @@ class euclid_photometric(Likelihood):
 
         return -chi2/2.
 
-    # Comopute the log likelihood for a given set of multipoles
+    # Comopute the chi2 = - 2 log(lkl) for given theory/observation covariance matrices
+    # (and optionally nuisance parameters accounting for theoretical error)
+
     def compute_chisq(self, eps_l, ells, Cov_observ_dict, Cov_theory_dict, T_Rerr_dict):
 
+        # The observation covariance matrix accoutns for the data, i.e. the fiducial model
         Cov_observ = Cov_observ_dict["Cov_observ"]
+
+        # The theory covariance matrix accounts for each assumed model
         Cov_theory = Cov_theory_dict["Cov_theory"]
+
+        # JL: explain T_Rerr
         T_Rerr = T_Rerr_dict["T_Rerr"]
 
         nbin = Cov_observ.shape[1]
         ell_jump = Cov_observ.shape[0]
 
+        # Add theoretical error (if user do not want one eps_l=0)
         shifted_Cov = Cov_theory + eps_l[:ell_jump, None, None] * T_Rerr
+
+        # Compute determinant of theory covariance matrix
         dtilde_the = np.linalg.det(shifted_Cov)
 
+        # Compute determinant of observation covariance matrix
         d_obs = np.linalg.det(Cov_observ)
+
+        # Compute mixed determinant (of theory covariance matrix with one column replaced
+        # by observational one, with a sum over the nbin possibilities)
         dtilde_mix = np.zeros_like(dtilde_the)
         for i in range(nbin):
             newCov = np.copy(shifted_Cov)
             newCov[:, i] = Cov_observ[:, :, i]
             dtilde_mix += np.linalg.det(newCov)
 
+        # This unit matrix mutiplied by the covariance matrix dimension will be used to
+        # normalise the likelihood to L/L_max, that is, such that Delta chi2=0 at the fiducial
         N = np.ones_like(ells) * nbin
 
-        # if the probe is 3x2pt calculate the part with no cross correlation
+        # if the probe includes 3x2pt, calculate the part with no cross-correlation
+        # JL I did not udnerstand why we need to treat this case separately, please explain
         if "WL_GCph_XC" in self.probe:
 
             Cov_observ_high = Cov_observ_dict["Cov_observ_high"]
@@ -581,4 +650,5 @@ class euclid_photometric(Likelihood):
             d_obs = np.concatenate([d_obs, d_obs_high])
             dtilde_mix = np.concatenate([dtilde_mix, dtilde_mix_high])
 
+        # Return the chi2
         return np.sum((2 * ells + 1) * self.fsky * ((dtilde_mix / dtilde_the) + np.log(dtilde_the / d_obs) - N) + np.power(eps_l, 2))
