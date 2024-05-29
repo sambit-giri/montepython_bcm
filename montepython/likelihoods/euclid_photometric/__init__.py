@@ -557,8 +557,9 @@ class euclid_photometric(Likelihood):
         #############################################################
 
        # The treatment of theoretical errors is done as described in (1210.1294)
-       # In this method we add a new nuisance parameter epsilon for every multipole and then minimize over them on the level of the likelihood
-       # T_Rerr_dict relates to the power spectrum error like the Covariance relates to the angular power spectrum
+       # This is the model of adding a global uncorrelated error stemming from an uncertainty in the predicted power spectrum.
+       # In this method we add a new nuisance parameter epsilon for every multipole and then minimize over them on the level of the likelihood. 
+       # This is done by shifting the predicted covariance by T_Rerr. It relates to the power spectrum error like the covariance relates to the angular power spectrum
        # This Tensor the equivalent to theoretical error covariance matrix R in the 2012 paper.
         T_Rerr_dict = dict()
         T_Rerr_dict["T_Rerr"] = np.zeros_like(Cov_theory_dict["Cov_theory"])
