@@ -39,7 +39,7 @@ class euclid_photometric(Likelihood):
         self.need_cosmo_arguments(data, {'z_max_pk': self.zmax})
         self.need_cosmo_arguments(data, {'P_k_max_1/Mpc': 1.5*self.k_max_h_by_Mpc})
 
-        # Define array of l values, evenly spaced in logscale,
+        # Define array of l values, evenly spaced in log scale,
         # with different lmax for WL, GC and XC
         if self.lmax_WL > self.lmax_GC:
             self.l_WL = np.logspace(np.log10(self.lmin), np.log10(self.lmax_WL), num=self.lbin, endpoint=True)
@@ -118,7 +118,7 @@ class euclid_photometric(Likelihood):
                 self.bias_names.append('bias_'+str(ibin+1))
             self.nuisance += self.bias_names
 
-        # For WL: intrinsic alignement parameters
+        # For WL: intrinsic alignment parameters
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
             self.nuisance += ['aIA', 'etaIA', 'betaIA']
 
@@ -236,7 +236,7 @@ class euclid_photometric(Likelihood):
         if self.printtimes:
             t_start = time()
 
-        # Relation between redhsuft z and comoving radius r,
+        # Relation between redshift z and comoving radius r,
         # inferred from cosmological module with the function z_of_r
         self.r = np.zeros(self.nzmax, 'float64')
         self.dzdr = np.zeros(self.nzmax, 'float64')
@@ -272,7 +272,7 @@ class euclid_photometric(Likelihood):
         Pk_m_nl_grid, k_grid, z_grid = cosmo.get_pk_and_k_and_z()
         Pk_m_l_grid, _, _ = cosmo.get_pk_and_k_and_z(nonlinear=False)
 
-        # Order them by decreasing redhsift / growing time
+        # Order them by increasing redhsift / growing lookback time
         z_grid = z_grid[::-1]
         Pk_m_nl_grid = np.flip(Pk_m_nl_grid,axis=1)
         Pk_m_l_grid = np.flip(Pk_m_l_grid,axis=1)
@@ -308,7 +308,7 @@ class euclid_photometric(Likelihood):
             # choice to only effect the Lensing power spectrum by baryonic effects
             Pk_WL *= baryonic_feedback.get_boost_baryonic_feedback(cosmo,data,self,k,self.z)
 
-        # Pk_GC defined as gemetric mean of Pk_WL and Pk_GC
+        # Pk_XC defined as geometric mean of Pk_WL and Pk_GC
         Pk_XC = np.sqrt(Pk_GC * Pk_WL)
 
         if self.printtimes:
@@ -319,7 +319,7 @@ class euclid_photometric(Likelihood):
         # Get growth factor D(z,k) #
         ############################
 
-        # Scale-independent case passed by comsology module
+        # Scale-independent case passed by cosmology module
         if self.scale_dependent_f == False:
             D_z= np.ones_like((self.nzmax), 'float64')
             for iz, zi in enumerate(self.z):
@@ -349,7 +349,7 @@ class euclid_photometric(Likelihood):
             integral = 3./2.*H0**2. *cosmo.Omega_m()*self.r[None,:,None]*(1.+self.z[None,:,None])*self.eta_z.T[:,None,:]*(1-self.r[None,:,None]/self.r[None,None,:])
             W_gamma  = np.trapz(np.triu(integral),self.z,axis=-1).T
 
-            # Contribution from intrinsic alignement
+            # Contribution from intrinsic alignment
             W_IA = self.eta_z *self.H_z[:,None]
             C_IA = 0.0134
             A_IA = data.mcmc_parameters['aIA']['current']*(data.mcmc_parameters['aIA']['scale'])
@@ -364,7 +364,7 @@ class euclid_photometric(Likelihood):
         if 'GCph' in self.probe or 'WL_GCph_XC' in self.probe:
 
             # Convert bias parameters passed as nuisance parameters into an array 'galaxy_bias' of biases at each z
-            # See 2303.09451 for detials on different presciptions
+            # See 2303.09451 for details on different prescriptions
             bias_values = np.zeros((self.nbin),'float64')
             for ibin in range(self.nbin):
                 bias_values[ibin] = data.mcmc_parameters[self.bias_names[ibin]]['current']*data.mcmc_parameters[self.bias_names[ibin]]['scale']
@@ -489,9 +489,9 @@ class euclid_photometric(Likelihood):
                 Cl_GL[:,i,i] += self.noise['GL']
                 Cl_LG[:,i,i] += self.noise['LG']
 
-        #################################################
-        # If needed, save coomputed Cl in fiducial file #
-        #################################################
+        ################################################
+        # If needed, save computed Cl in fiducial file #
+        ################################################
 
         if self.fid_values_exist is False:
 
@@ -521,9 +521,10 @@ class euclid_photometric(Likelihood):
         # Interpolate Cl at each l to build theory covariance matrix #
         ##############################################################
 
-        # for each type WL, GC and XC, we do a spline inteprolation of Cl spectra at each l
-        # JL: the overall stucture and motivation for the dictionary Cov_theory_dic is bit
-        # difficult to guess, I would explain where what is this Cov_theory_dic
+        # for each type WL, GC and XC, we do a spline interpolation of Cl spectra at each integer multipole l
+        # The Cov_theory_dict contains both the full alm covariance constructed like a block matrix,
+        # and the reduced matrices that appear when doing scale cuts. 
+        # We use a dictionary to to pass the Cls by reference  and have a uniform input for the computation of the chi2
         Cov_theory_dict = dict()
         if 'WL' in self.probe or 'WL_GCph_XC' in self.probe:
             inter_LL = interp1d(self.l_WL,Cl_LL,axis=0, kind='cubic',fill_value="extrapolate")(self.ells_WL)
@@ -555,29 +556,35 @@ class euclid_photometric(Likelihood):
         # Compute likelihood, optionally adding a theoretical error #
         #############################################################
 
-        # JL: give a reference to the way we treat theoretical errors
-        # JL: what is T_Rerr_dict? Related to theoretical error? How?
+       # The treatment of theoretical errors is done as described in (1210.1294)
+       # In this method we add a new nuisance parameter epsilon for every multipole and then minimize over them on the level of the likelihood
+       # T_Rerr_dict relates to the power spectrum error like the Covariance relates to the angular power spectrum
+       # This Tensor the equivalent to theoretical error covariance matrix R in the 2012 paper.
         T_Rerr_dict = dict()
         T_Rerr_dict["T_Rerr"] = np.zeros_like(Cov_theory_dict["Cov_theory"])
         if 'WL_GCph_XC' in self.probe:
             T_Rerr_dict["T_Rerr_high"] = np.zeros_like(Cov_theory_dict["Cov_theory_high"])
 
         # compute chi2 given the theory and observation (=fiducial) covariance matrices
-        # JL: explain the 'partial' stuff (I iundertsand it means without theroetical error,
-        # but this deserves explanations)
+        # We pass the dictionaries beforehand using partial. The new function pcompute_chisq now only needs to be passed the epsilon parameters. 
         pcompute_chisq =  partial(self.compute_chisq, ells = ells, Cov_observ_dict = self.Cov_observ_dict, Cov_theory_dict = Cov_theory_dict, T_Rerr_dict = T_Rerr_dict)
 
-        # Define nuisance parameters acouting for theoretical error
+        # Define nuisance parameters accounting for theoretical error
+        # We set them to zero as an initial guess for the minimization.
         eps_l = np.zeros_like(ells)
         if self.theoretical_error != False:
             import theoretical_errors
+            # See the theoretical_errors file for a more detailed explanation of each step
 
-            #JL: needs some expanation and reference
+            # The computation of the power spectrum error is equivalent to the computation of the Cl
             El_dict = theoretical_errors.get_covariance_error(cosmo, data, self, k, Pk_WL, Pk_GC, Pk_XC, W_L, W_G)
+            # The construction of the theoretical error covariance matrix R is equivalent to the construction of the Covariance.
+            # The update of T_Rerr_dict updates pcompute_chisq as well
             T_Rerr_dict.update(theoretical_errors.spline_error(self, El_dict))
+            # The epsilon parameters are updated to the values that minimise the chi2
             eps_l = theoretical_errors.minimize_chisq(self, self.compute_chisq, ells, self.Cov_observ_dict, Cov_theory_dict, T_Rerr_dict)
 
-        # JL: explain this
+        # Computes the chi2. If no theoretical errors where asked for the T_Rerr and epsilon are all 0 and the function corresponds to the normal chi2
         chi2 = pcompute_chisq(eps_l)
 
         if self.printtimes:
@@ -587,18 +594,18 @@ class euclid_photometric(Likelihood):
 
         return -chi2/2.
 
-    # Comopute the chi2 = - 2 log(lkl) for given theory/observation covariance matrices
+    # Compute the chi2 = - 2 log(lkl) for given theory/observation covariance matrices
     # (and optionally nuisance parameters accounting for theoretical error)
 
     def compute_chisq(self, eps_l, ells, Cov_observ_dict, Cov_theory_dict, T_Rerr_dict):
 
-        # The observation covariance matrix accoutns for the data, i.e. the fiducial model
+        # The observation covariance matrix accounts for the data, i.e. the fiducial model
         Cov_observ = Cov_observ_dict["Cov_observ"]
 
         # The theory covariance matrix accounts for each assumed model
         Cov_theory = Cov_theory_dict["Cov_theory"]
 
-        # JL: explain T_Rerr
+        # The Covariance error is the shift of the Covariance after a shift of the Power spectrum by the theoretical error, computed for each model.
         T_Rerr = T_Rerr_dict["T_Rerr"]
 
         nbin = Cov_observ.shape[1]
@@ -607,7 +614,7 @@ class euclid_photometric(Likelihood):
         # Add theoretical error (if user do not want one eps_l=0)
         shifted_Cov = Cov_theory + eps_l[:ell_jump, None, None] * T_Rerr
 
-        # Compute determinant of theory covariance matrix
+        # Compute determinant of the (shifted) theory covariance matrix
         dtilde_the = np.linalg.det(shifted_Cov)
 
         # Compute determinant of observation covariance matrix
@@ -621,14 +628,15 @@ class euclid_photometric(Likelihood):
             newCov[:, i] = Cov_observ[:, :, i]
             dtilde_mix += np.linalg.det(newCov)
 
-        # This unit matrix mutiplied by the covariance matrix dimension will be used to
+        # This unit matrix multiplied by the covariance matrix dimension will be used to
         # normalise the likelihood to L/L_max, that is, such that Delta chi2=0 at the fiducial
         N = np.ones_like(ells) * nbin
 
         # if the probe includes 3x2pt, calculate the part with no cross-correlation
-        # JL I did not udnerstand why we need to treat this case separately, please explain
+        # The computation of the 3x2pt part or when only asking for WL/GC alone is the exact same and don't need to be treated separately
         if "WL_GCph_XC" in self.probe:
 
+            # the computation of the chi2 from these multipoles is equivalent up to using the cut correlation matrices
             Cov_observ_high = Cov_observ_dict["Cov_observ_high"]
             Cov_theory_high = Cov_theory_dict["Cov_theory_high"]
             T_Rerr_high = T_Rerr_dict["T_Rerr_high"]
@@ -645,6 +653,7 @@ class euclid_photometric(Likelihood):
                 newCov[:, i] = Cov_observ_high[:, :, i]
                 dtilde_mix_high += np.linalg.det(newCov)
 
+            # Append the chi2 summands for multipoles with no cross correlation
             N[ell_jump:] = nbin
             dtilde_the = np.concatenate([dtilde_the, dtilde_the_high])
             d_obs = np.concatenate([d_obs, d_obs_high])
