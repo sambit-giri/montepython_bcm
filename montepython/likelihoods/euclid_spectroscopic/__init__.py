@@ -68,8 +68,8 @@ class euclid_spectroscopic(Likelihood):
         # Initialize the flag stating whether fiducial file exists. Will be set to true if it does.
         self.fid_values_exist = False
 
-        # Create arrays in which the fiducial values of H(z), D(z), sgima_v(z), sigma_p(z), P_galaxy(k,z,mu)
-        # will be stored when reading the dicuail model file (with z running over the the center of each bin)
+        # Create arrays in which the fiducial values of H(z), D(z), sigma_v(z), sigma_p(z), P_galaxy(k,z,mu)
+        # will be stored when reading the fiducial model file (with z running over the center of each bin)
         self.H_fid = np.zeros(self.nbin, "float64")
         self.D_A_fid = np.zeros(self.nbin, "float64")
         self.sigma_v_fid = np.zeros(self.nbin, "float64")
@@ -118,7 +118,7 @@ class euclid_spectroscopic(Likelihood):
                     self.f_cb_fid[:, :, :] = fid_file["f_cb"]
             except ValueError as VE:
                 warnings.warn(
-                    "The scale dependance of the growth rate has changed between the fiducial and now."
+                    "The scale dependence of the growth rate has changed between the fiducial and now."
                 )
                 raise VE
 
@@ -160,7 +160,7 @@ class euclid_spectroscopic(Likelihood):
         self.V_fid = np.array([7.94, 9.15, 10.05, 16.22]) * 1e9 / (self.h_fid**3)
 
         # Nuisance parameters if euclid_spectroscopic.NonLinError = 'marginalized':
-        # (simga_v,sigma_p) in each bin
+        # (sigma_v,sigma_p) in each bin
         if self.NonLinError == "marginalized":
             self.nuisance += [
                 "sigma_v0",
@@ -246,7 +246,7 @@ class euclid_spectroscopic(Likelihood):
         # if you want to reproduce the old Euclid IST:F results with the h-bug, rescale here the k as in the comment:
         #    self.k *= self.h / self.h_fid
 
-        # infer the list of osberved mu
+        # infer the list of observed mu
         self.mu = (
             self.mu_fid[None, :]
             * q_parr[:, None]
@@ -416,7 +416,7 @@ class euclid_spectroscopic(Likelihood):
             # It is open for debate whether we should use P_m or P_cb for sigma_v .
             # The idea behind our choice of P_m is that, if it should be the same as sigma_p, we should use
             # P_m as this is a gravitational effect and not related to the tracer bias.
-            # We could use diffrent sigma_v and sigma_p using P_cb and P_m respectively.
+            # We could use different sigma_v and sigma_p using P_cb and P_m respectively.
             pk_sigmavp[:, index_z] = np.exp(pk_lin_spline(k_sigmavp[:]))
             for index_mu in range(self.mu_size):
                 pk_lin[:, index_z, index_mu] = np.exp(
@@ -429,13 +429,13 @@ class euclid_spectroscopic(Likelihood):
                     pk_tracer_nobao_spline(self.k[:, index_z, index_mu])
                 )
 
-        # Scheme in wich sigma_p and sigma_v are set to zero (which gives the linear power spectrum)
+        # Scheme in which sigma_p and sigma_v are set to zero (which gives the linear power spectrum)
         if self.NonLinError == "linear":
             # linear setting
             sigma_v = np.zeros((self.nbin), "float64")
             sigma_p = np.zeros((self.nbin), "float64")
 
-        # Scheme in wich sigma_p and sigma_v are predicted theoretically given the power spectrum
+        # Scheme in which sigma_p and sigma_v are predicted theoretically given the power spectrum
         elif self.NonLinError == "predicted":
             # nonlinear pessimistic and optimistic setting
             # Compute the sigma's by integrating over the power spectrum
@@ -505,7 +505,7 @@ class euclid_spectroscopic(Likelihood):
         F_AP = q_parr * q_orth**2
 
         # Linear Kaiser factor F_Kaiser(k,z,mu)
-        # following the presciption of arXiv:1807.04672v2 in f*sigma8 factor we will use f_cb
+        # following the prescription of arXiv:1807.04672v2 in f*sigma8 factor we will use f_cb
         F_Kaiser = (
             bsigma8[None, :, None]
             + fz_kaiser * sigma8_tracer_of_z[None, :, None] * self.mu[None, :, :] ** 2
@@ -527,7 +527,7 @@ class euclid_spectroscopic(Likelihood):
         )
         P_tracer_dw = pk_tracer_lin * fac + pk_tracer_nobao * (1 - fac)
 
-        # Finally, (observable) galaxy power spectrum accouting for all these effects,
+        # Finally, (observable) galaxy power spectrum accounting for all these effects,
         # but still without shot noise
         self.P_obs = (
             F_AP[None, :, None]
@@ -595,7 +595,7 @@ class euclid_spectroscopic(Likelihood):
             ]
         )
 
-        # Add shot noise to galaxy spectrum
+        # Add (scale-independent) shot noise to galaxy spectrum
         self.P_obs += self.P_shot[None, :, None] + self.P_shot_fid[None, :, None]
 
         ###########################
@@ -610,7 +610,7 @@ class euclid_spectroscopic(Likelihood):
             for key, value in data.mcmc_parameters.items():
                 fiducial_cosmo[key] = value["current"] * value["scale"]
 
-            # check that h_fid was defined consitently
+            # check that h_fid was defined consistently
             if (self.h_fid != cosmo.h()):
                 print("\n")
                 warnings.warn(
@@ -653,13 +653,13 @@ class euclid_spectroscopic(Likelihood):
                 mu_integrant[index_mu] = simpson(k_integrant[:], x=self.k_fid[:])
             # Then, integrate it over mu
             chi2_of_z = simpson(mu_integrant[:], x=self.mu_fid[:])
-            # Add contributionf rom different z
+            # Add contribution from different z
             chi2 += chi2_of_z
 
         # return log(lkl) = - chi2/2
         return -chi2 / 2.0
 
-    # Auxilliary function computing the integrand that appears in the likelihood
+    # Auxiliary function computing the integrand that appears in the likelihood
     # and that gets integrated over (k,mu,z)
     # It is essentially [(theory - fiducial)/theory power spectrum]**2 weighted by volume
 
