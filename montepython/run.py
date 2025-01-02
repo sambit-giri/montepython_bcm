@@ -40,7 +40,7 @@ def run(custom_command=''):
     # Once that the initialisation phase is done, one can import the
     # sampler
     import sampler
-
+    
     # Generic sampler call
     sampler.run(cosmo, data, command_line)
 

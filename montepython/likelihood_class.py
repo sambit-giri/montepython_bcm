@@ -22,6 +22,8 @@ import scipy.misc
 
 import io_mp
 from io_mp import dictitems,dictvalues,dictkeys
+# from . import io_mp
+# from .io_mp import dictitems,dictvalues,dictkeys
 
 
 class Likelihood(object):

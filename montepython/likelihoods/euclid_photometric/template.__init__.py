@@ -308,7 +308,6 @@ class euclid_photometric(Likelihood):
             # choice to only effect the Lensing power spectrum by baryonic effects
             Pk_WL *= baryonic_feedback.get_boost_baryonic_feedback(cosmo,data,self,k,self.z)
 
-
         # Pk_XC defined as geometric mean of Pk_WL and Pk_GC
         Pk_XC = np.sqrt(Pk_GC * Pk_WL)
 

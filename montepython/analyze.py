@@ -1592,6 +1592,7 @@ def recover_folder_and_files(files):
                  and all([x in elem for x in substrings])]
     # Otherwise, extract the folder from the chain file-name.
     else:
+        print(files[0])
         # If the name is completely wrong, say it
         if not os.path.exists(files[0]):
             raise io_mp.AnalyzeError(

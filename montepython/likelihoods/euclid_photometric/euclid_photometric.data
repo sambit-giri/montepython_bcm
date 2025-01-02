@@ -24,7 +24,6 @@ euclid_photometric.probe = ['WL_GCph_XC']
 # evaluated l-values
 euclid_photometric.lmin = 10
 # lmax values must statisfy the condition lmax_WL >= lmax_GC, lmax_XC
-# pessimistic case:
 euclid_photometric.lmax_WL=1500
 euclid_photometric.lmax_GC=750
 euclid_photometric.lmax_XC=750
@@ -74,7 +73,7 @@ euclid_photometric.bias_model = 'binned'
 euclid_photometric.use_tracer = 'matter'
 
 # baryonic feedback
-euclid_photometric.use_BCemu = False
+euclid_photometric.use_BCemu = True 
 euclid_photometric.verbose_BCemu = True
 euclid_photometric.BCemu_k_bins = 200
 euclid_photometric.BCemu_z_bins = 20
@@ -93,7 +92,7 @@ euclid_photometric.minimize_Terr_binned = True
 # with P_cb, or vice-versa. As long as 'fit_different_data' is set to
 # False, this will not be used and you don't need to worry about it.
 euclid_photometric.fit_different_data = False
-euclid_photometric.data_use_BCemu= True
+euclid_photometric.data_use_BCemu = True
 euclid_photometric.data_use_tracer= "clustering"
 
 #################################################

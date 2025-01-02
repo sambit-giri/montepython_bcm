@@ -1,5 +1,6 @@
 #------Experiments to test (separated with commas)-----
 data.experiments=['euclid_photometric']
+data.over_sampling=[1, 4]
 
 #------ Parameter list -------
 
