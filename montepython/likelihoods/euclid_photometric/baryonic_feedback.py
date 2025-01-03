@@ -19,7 +19,10 @@ def get_boost_baryonic_feedback(cosmo, data, lkl, k, z):
 
     print('Baryonic feedback flag:', data.bar_flag)
 
-    if data.bar_flag==2:
+    if data.bar_flag==0:
+        print('DMO model')
+        BFC_interpolator = lambda x,y: 1.0
+    elif data.bar_flag==2:
         # baryonic feedback modifications are only applied to k>kmin_bfc
         # it is very computationally expensive to call BCemu at every z in self.z, and it is a very smooth function with z,
         # so it is only called at self.BCemu_k_bins points in k and self.BCemu_z_bins points in z and then the result is
