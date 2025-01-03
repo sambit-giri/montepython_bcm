@@ -20,8 +20,8 @@ def get_boost_baryonic_feedback(cosmo, data, lkl, k, z):
     print('Baryonic feedback flag:', data.bar_flag)
 
     if data.bar_flag==0:
-        print('DMO model')
-        BFC_interpolator = lambda x,y: 1.0
+        BFC_interpolator = baryonic_feedback_hydrosims(0)
+
     elif data.bar_flag==2:
         # baryonic feedback modifications are only applied to k>kmin_bfc
         # it is very computationally expensive to call BCemu at every z in self.z, and it is a very smooth function with z,
@@ -108,7 +108,19 @@ def get_boost_baryonic_feedback(cosmo, data, lkl, k, z):
 
 
 def baryonic_feedback_hydrosims(bar_flag):
-    if bar_flag==11:
+    if bar_flag==0:
+        print('DMO model')
+        file_dmb = 'HydroSims/powtable_OWLS_AGN.dat'
+        file_dmo = 'HydroSims/powtable_DMONLY_L100N512.dat'
+        OWLS_planck_dmo = read_file(file_dmo)
+        OWLS_planck_dmb = read_file(file_dmb)
+        interpolator = interpolate.RectBivariateSpline(
+                OWLS_planck_dmo['k']*0.70, 
+                OWLS_planck_dmo['z'],
+                np.ones_like(OWLS_planck_dmb['P']/OWLS_planck_dmo['P']).T, 
+                kx=1, ky=1)
+        
+    elif bar_flag==11:
         print('OWLS model')
         file_dmb = 'HydroSims/powtable_OWLS_AGN.dat'
         file_dmo = 'HydroSims/powtable_DMONLY_L100N512.dat'
